@@ -1,7 +1,7 @@
 FROM node:24-bookworm-slim AS build
 WORKDIR /source
 RUN npm install --global pnpm@11.1.2
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 ENV HUSKY=0
 RUN pnpm install --frozen-lockfile
 COPY . .
