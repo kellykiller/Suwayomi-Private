@@ -138,11 +138,17 @@ export function AiUsage() {
             ],
         ];
         let position: number | null = 0;
+        const exportedIds = new Set<string>();
         while (position !== null) {
             // The next page depends on the cursor returned by this request.
             // eslint-disable-next-line no-await-in-loop
             const page: AiHistoryPage = await aiApi(`history?offset=${position}&limit=100`);
             for (const entry of page.entries) {
+                // New searches can shift offset pages during export; include each search once.
+                if (exportedIds.has(entry.id)) {
+                    continue;
+                }
+                exportedIds.add(entry.id);
                 rows.push([
                     entry.started,
                     entry.finished,
