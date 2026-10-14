@@ -40,7 +40,8 @@ export function normalizeTitle(value) {
     return value
         .normalize('NFKC')
         .normalize('NFD')
-        .replace(/\p{M}/gu, '')
+        .replace(/(\p{Script=Latin})\p{M}+/gu, '$1')
+        .normalize('NFC')
         .toLowerCase()
         .replace(/[^\p{L}\p{N}]/gu, '');
 }

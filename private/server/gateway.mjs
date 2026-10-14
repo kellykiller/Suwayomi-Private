@@ -75,7 +75,7 @@ async function body(req) {
     let size = 0;
     for await (const chunk of req) {
         size += chunk.length;
-        assert(size <= 8192, 'Anfrage ist zu groß.');
+        assert(size <= 16384, 'Anfrage ist zu groß.');
         chunks.push(chunk);
     }
     const value = JSON.parse(Buffer.concat(chunks).toString());

@@ -149,6 +149,8 @@ test('Title matching tolerates punctuation and accents but does not merge sequel
     assert(titleMatches('One-Piece', ['One Piece']));
     assert(titleMatches('Pokémon', ['Pokemon']));
     assert(titleMatches('ナルト', ['Naruto', 'ナルト']));
+    assert(!titleMatches('バトル', ['ハトル']));
+    assert(!titleMatches('ヴァンパイア', ['ウァンパイア']));
     assert(!titleMatches('Boruto', ['Naruto']));
     assert(!titleMatches('Naruto: Sasuke Story', ['Naruto']));
     assert(!titleMatches('One Piece Novel', ['One Piece']));
