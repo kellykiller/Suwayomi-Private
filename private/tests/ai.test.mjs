@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createAiService, recommend, titleMatches, validatePlan, AI_DEFAULTS } from '../server/ai.mjs';
+import { createAiService, recommend, titleMatches, validatePlan, chapterMetrics, AI_DEFAULTS } from '../server/ai.mjs';
 import { createGateway } from '../server/gateway.mjs';
 
 const key = 'sk-proj-' + 'fixtureOnly'.repeat(5);
@@ -44,6 +44,23 @@ async function fixture(t, options = {}) {
         }
         if (String(url).startsWith('https://api.openai.com/v1/models/')) return json({ id: 'gpt-5.4-mini' });
         const body = JSON.parse(input.body);
+        if (body.query.includes('AiMatchDetails'))
+            return options.details
+                ? options.details(body.variables.id, input)
+                : json({
+                      data: {
+                          fetchMangaAndChapters: {
+                              manga: {
+                                  id: body.variables.id,
+                                  thumbnailUrl: `/api/v1/manga/${body.variables.id}/thumbnail`,
+                              },
+                              chapters: [
+                                  { id: 1, chapterNumber: 1 },
+                                  { id: 2, chapterNumber: 2 },
+                              ],
+                          },
+                      },
+                  });
         if (body.query.includes('query AiSources'))
             return json({
                 data: {
@@ -76,7 +93,7 @@ async function fixture(t, options = {}) {
     });
     await service.save({ key, enabled: true });
     t.after(async () => {
-        service.stop();
+        await service.stop();
         await fs.rm(root, { recursive: true, force: true });
     });
     return { service, root, secrets, calls, modelCalls: () => modelCalls };
@@ -270,6 +287,75 @@ test('Invalid sources and excessive input are rejected before any paid model cal
     await assert.rejects(f.service.start({ ...input, sourceIds: Array(101).fill('1') }, request), /100/);
     await assert.rejects(f.service.save({ model: 'http://evil.example' }), /Ungültige KI/);
     assert.equal(f.modelCalls(), 0);
+});
+test('Chapter counts and covers are refreshed independently for each real source match', async (t) => {
+    const f = await fixture(t, {
+        source: async ({ source }) =>
+            json({
+                data: {
+                    fetchSourceManga: {
+                        hasNextPage: false,
+                        mangas: [{ id: Number(source) * 10, title: 'Naruto', inLibrary: false }],
+                    },
+                },
+            }),
+        details: async (id) =>
+            json({
+                data: {
+                    fetchMangaAndChapters: {
+                        manga: { id, thumbnailUrl: `/api/v1/manga/${id}/thumbnail` },
+                        chapters: Array.from({ length: id === 10 ? 10 : 8 }, (_, index) => ({
+                            id: index + 1,
+                            chapterNumber: index + 1,
+                        })),
+                    },
+                },
+            }),
+    });
+    const job = await f.service.start({ ...input, sourceIds: ['1', '2'] }, request);
+    const result = await finished(f.service, job.id);
+    const matches = result.recommendations[0].matches.sort((a, b) => a.id - b.id);
+    assert.deepEqual(
+        matches.map((match) => match.chapterCount),
+        [10, 8],
+    );
+    assert(matches.every((match) => match.detailsPhase === 'ready' && match.thumbnailUrl));
+    assert.deepEqual(
+        chapterMetrics([
+            { id: 1, chapterNumber: 1 },
+            { id: 2, chapterNumber: 1 },
+            { id: 3, chapterNumber: 1.5 },
+            { id: 4, chapterNumber: -1 },
+        ]),
+        { chapterCount: 3, chapterEntryCount: 4 },
+    );
+    const usage = await f.service.usage();
+    assert.equal(usage.totals.searches, 1);
+    assert.equal((await f.service.history()).entries[0].prompt, input.prompt);
+    assert.equal(usage.balance.estimatedUsd, 2.309565);
+});
+test('An incomplete model answer is still charged in the history; failed chapter details stay unknown', async (t) => {
+    const f = await fixture(t, {
+        model: async () =>
+            json({
+                status: 'incomplete',
+                model: 'gpt-5.4-mini',
+                usage: { input_tokens: 100, output_tokens: 80 },
+                output: [],
+            }),
+    });
+    const job = await f.service.start(input, request);
+    const result = await finished(f.service, job.id);
+    assert.equal(result.phase, 'failed');
+    assert.equal((await f.service.history()).entries[0].costUsd, 0.000435);
+    const other = await fixture(t, { details: async () => json({ errors: [{ message: 'unavailable' }] }) });
+    const next = await other.service.start(input, request);
+    const completed = await finished(other.service, next.id);
+    assert(
+        completed.recommendations[0].matches.every(
+            (match) => match.chapterCount === null && match.detailsPhase === 'failed',
+        ),
+    );
 });
 function untilAbort(signal) {
     return new Promise((resolve, reject) => {

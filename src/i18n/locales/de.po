@@ -4939,3 +4939,239 @@ msgstr "Was möchtest du lesen?"
 #: src/features/ai-search/AiSearch.tsx
 msgid "Your search request is sent to OpenAI when you start an AI search. The API is billed separately from ChatGPT. Manga pages and your library are not sent."
 msgstr "Dein Suchwunsch wird beim Start einer KI-Suche an OpenAI gesendet. Die API wird getrennt von ChatGPT abgerechnet. Manga-Seiten und deine Bibliothek werden nicht übertragen."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "AI search history"
+msgstr "KI-Suchhistorie"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "AI usage and balance"
+msgstr "KI-Verbrauch und Guthaben"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Admin key removed"
+msgstr "Admin-Key entfernt"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "After"
+msgstr "Danach"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Average per search"
+msgstr "Durchschnitt pro Suche"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Balance checkpoint saved"
+msgstr "Guthabenstand gespeichert"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Before"
+msgstr "Davor"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Billed total for retrieved period"
+msgstr "Abgerechnete Kosten im abgerufenen Zeitraum"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Billing connection saved"
+msgstr "Abrechnungsverbindung gespeichert"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Billing totals may be delayed. They are shown separately and are not subtracted again from the local balance estimate."
+msgstr "Abrechnungswerte können verzögert eintreffen. Sie werden separat angezeigt und nicht noch einmal vom geschätzten Restguthaben abgezogen."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Chapter count unknown"
+msgstr "Kapitelanzahl unbekannt"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Cost period in days"
+msgstr "Kostenzeitraum in Tagen"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Current balance in USD"
+msgstr "Aktuelles Guthaben in USD"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Days"
+msgstr "Tage"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Enter the current amount shown in OpenAI after other usage or a top-up. This creates a new checkpoint and preserves all previous search records."
+msgstr "Trage nach anderen Verbräuchen oder einer Aufladung den aktuellen Betrag aus OpenAI ein. Dadurch entsteht ein neuer Bezugspunkt; alle bisherigen Suchaufzeichnungen bleiben erhalten."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Entire organization"
+msgstr "Gesamte Organisation"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Entries"
+msgstr "Einträge"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Estimated balance after search"
+msgstr "Geschätztes Guthaben nach der Suche"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Estimated balance before search"
+msgstr "Geschätztes Guthaben vor der Suche"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Estimated remaining balance"
+msgstr "Geschätztes Restguthaben"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Estimated search cost"
+msgstr "Geschätzte Suchkosten"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Estimated spend since that balance"
+msgstr "Geschätzter Verbrauch seit diesem Guthabenstand"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Export CSV"
+msgstr "CSV exportieren"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Interrupted by restart"
+msgstr "Durch Neustart unterbrochen"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Last manually entered balance"
+msgstr "Zuletzt manuell eingetragener Guthabenstand"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Leave empty to retrieve costs for the entire organization."
+msgstr "Leer lassen, um Kosten der gesamten Organisation abzurufen."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Loading chapters"
+msgstr "Kapitel werden geladen"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Local cache"
+msgstr "Lokaler Zwischenspeicher"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "No AI searches have been recorded yet."
+msgstr "Noch keine KI-Suchen aufgezeichnet."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Official OpenAI costs"
+msgstr "Offizielle OpenAI-Kosten"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Open OpenAI billing"
+msgstr "OpenAI-Abrechnung öffnen"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "OpenAI cached input tokens"
+msgstr "Von OpenAI zwischengespeicherte Eingabe-Tokens"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "OpenAI costs retrieved"
+msgstr "OpenAI-Kosten abgerufen"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "OpenAI response ID"
+msgstr "OpenAI-Antwort-ID"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Optional OpenAI admin key"
+msgstr "Optionaler OpenAI-Admin-Key"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Optional OpenAI project ID"
+msgstr "Optionale OpenAI-Projekt-ID"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Paid searches"
+msgstr "Kostenpflichtige Suchen"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Price basis"
+msgstr "Preisgrundlage"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Prompts and results are stored privately on the NAS from this version onward. Searches made before tracking was installed cannot be reconstructed."
+msgstr "Prompts und Ergebnisse werden ab dieser Version privat auf dem NAS gespeichert. Suchen vor der Installation dieser Erfassung können nicht rekonstruiert werden."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Reason for balance update"
+msgstr "Grund für den neuen Guthabenstand"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Reasoning tokens"
+msgstr "Reasoning-Tokens"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Reasoning tokens are included in output tokens and are not charged twice. Each search retains its original price basis. Local answer-cache hits cost zero."
+msgstr "Reasoning-Tokens sind in den Ausgabe-Tokens enthalten und werden nicht doppelt berechnet. Jede Suche behält ihre ursprüngliche Preisgrundlage. Lokale Antwort-Cache-Treffer kosten nichts."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Recommended titles"
+msgstr "Vorgeschlagene Titel"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Remove admin key"
+msgstr "Admin-Key entfernen"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Retrieve OpenAI costs"
+msgstr "OpenAI-Kosten abrufen"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Retrieved at"
+msgstr "Abgerufen am"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Save balance checkpoint"
+msgstr "Guthabenstand speichern"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Save billing connection"
+msgstr "Abrechnungsverbindung speichern"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Searches"
+msgstr "Suchen"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Some API requests have no final token usage. Their cost is unknown and is not subtracted from this estimate."
+msgstr "Für einige API-Anfragen fehlen abschließende Tokenwerte. Ihre Kosten sind unbekannt und werden in dieser Schätzung nicht abgezogen."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Source matches"
+msgstr "Quellentreffer"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Standard USD prices per million tokens, checked on"
+msgstr "Standardpreise in USD pro Million Tokens, geprüft am"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "The official Costs API returns daily billed totals, not your remaining credit or a bill for each prompt. It requires a separate OpenAI admin key with usage read permission."
+msgstr "Die offizielle Kosten-API liefert abgerechnete Tageswerte, aber kein Restguthaben und keine Rechnung je Prompt. Dafür ist ein separater OpenAI-Admin-Key mit Leserechten für Usage erforderlich."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "This balance comparison is incomplete because at least one API request has unknown cost."
+msgstr "Dieser Guthabenvergleich ist unvollständig, weil die Kosten mindestens einer API-Anfrage unbekannt sind."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "This is a local estimate, not a live prepaid balance from OpenAI. Other API usage, top-ups, refunds and expiring credits are not detected automatically."
+msgstr "Dies ist eine lokale Schätzung, kein live von OpenAI abgerufenes Prepaid-Guthaben. Andere API-Verbräuche, Aufladungen, Erstattungen und verfallende Credits werden nicht automatisch erkannt."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Total estimated cost"
+msgstr "Geschätzte Gesamtkosten"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Update manual balance"
+msgstr "Guthabenstand aktualisieren"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Average per search with known cost"
+msgstr "Durchschnitt pro Suche mit bekannten Kosten"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Requests with unknown cost"
+msgstr "Anfragen mit unbekannten Kosten"

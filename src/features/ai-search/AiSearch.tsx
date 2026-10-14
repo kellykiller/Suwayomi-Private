@@ -24,6 +24,9 @@ import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import Box from '@mui/material/Box';
+import { SpinnerImage } from '@/base/components/SpinnerImage.tsx';
+import { Mangas } from '@/features/manga/services/Mangas.ts';
 import { AppRoutes } from '@/base/AppRoute.constants.ts';
 import { requestManager } from '@/lib/requests/RequestManager.ts';
 import { Sources } from '@/features/source/services/Sources.ts';
@@ -150,6 +153,15 @@ export function AiSearch() {
             clearTimeout(timer);
         };
     }, [jobId]);
+    const chapterLabel = (match: AiSearchJob['recommendations'][number]['matches'][number]) => {
+        if (match.chapterCount !== null) {
+            return `${match.chapterCount} ${t`Chapters`}`;
+        }
+        if (match.detailsPhase === 'loading') {
+            return t`Loading chapters`;
+        }
+        return t`Chapter count unknown`;
+    };
     const busy = pending || (!!job && !job.finished);
     const phases = {
         planning: t`Understanding your request`,
@@ -172,6 +184,10 @@ export function AiSearch() {
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="h5">{t`AI search`}</Typography>
                 <Button component={Link} to={AppRoutes.settings.children.ai.path}>{t`AI settings`}</Button>
+                <Button
+                    component={Link}
+                    to={AppRoutes.settings.children.aiUsage.path}
+                >{t`AI usage and balance`}</Button>
             </Stack>
             <Typography color="text.secondary">{t`Describe what you want to read. AI suggests titles and Suwayomi looks for them across your selected installed sources.`}</Typography>
             {error && (
@@ -194,26 +210,7 @@ export function AiSearch() {
                         disabled={busy}
                         onChange={(event) => setPrompt(event.target.value)}
                         slotProps={{ htmlInput: { maxLength: 2000 } }}
-                        placeholder={t`Find manga like One Piece, but with more fights.`}
                     />
-                    <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                        {[
-                            t`Find manga like One Piece, but with more fights.`,
-                            t`Romance manga with real relationship progress and little repetitive embarrassment.`,
-                        ].map((example) => (
-                            <Chip
-                                key={example}
-                                label={example}
-                                disabled={busy}
-                                onClick={() => setPrompt(example)}
-                                sx={{
-                                    maxWidth: '100%',
-                                    height: 'auto',
-                                    '& .MuiChip-label': { whiteSpace: 'normal', py: 1 },
-                                }}
-                            />
-                        ))}
-                    </Stack>
                     <Accordion disableGutters>
                         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                             <Typography>
@@ -359,6 +356,29 @@ export function AiSearch() {
                                     {job.usage.outputTokens}
                                 </Typography>
                             )}
+                            {job.accounting && (
+                                <Typography variant="body2" color="text.secondary">
+                                    {t`Estimated search cost`}:{' '}
+                                    {job.accounting.costUsd === null
+                                        ? t`Unknown`
+                                        : new Intl.NumberFormat(i18n.locale, {
+                                              style: 'currency',
+                                              currency: 'USD',
+                                              minimumFractionDigits: 4,
+                                              maximumFractionDigits: 6,
+                                          }).format(job.accounting.costUsd)}
+                                    {' · '}
+                                    {t`Estimated balance after search`}:{' '}
+                                    {job.accounting.balanceAfterUsd === null
+                                        ? t`Unknown`
+                                        : new Intl.NumberFormat(i18n.locale, {
+                                              style: 'currency',
+                                              currency: 'USD',
+                                              minimumFractionDigits: 4,
+                                              maximumFractionDigits: 6,
+                                          }).format(job.accounting.balanceAfterUsd)}
+                                </Typography>
+                            )}
                         </Stack>
                     </Paper>
                     {!!job.recommendations.length && (
@@ -372,46 +392,83 @@ export function AiSearch() {
                     )}
                     {recommendations.map((item, index) => (
                         <Paper key={item.title} variant="outlined" sx={{ p: 2 }}>
-                            <Stack spacing={1}>
-                                <Typography variant="h6">
-                                    {index + 1}. {item.title}
-                                </Typography>
-                                {!!item.aliases.length && (
-                                    <Typography variant="body2" color="text.secondary">
-                                        {item.aliases.join(' · ')}
+                            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                                <Box
+                                    sx={{
+                                        width: { xs: 100, sm: 130 },
+                                        aspectRatio: '2 / 3',
+                                        flexShrink: 0,
+                                        borderRadius: 1,
+                                        overflow: 'hidden',
+                                        position: 'relative',
+                                        bgcolor: 'action.hover',
+                                    }}
+                                >
+                                    <SpinnerImage
+                                        alt={item.title}
+                                        src={
+                                            item.matches.find((match) => !!match.thumbnailUrl)
+                                                ? Mangas.getThumbnailUrl(
+                                                      item.matches.find((match) => !!match.thumbnailUrl)!,
+                                                  )
+                                                : ''
+                                        }
+                                        imgStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                        spinnerStyle={{
+                                            width: '100%',
+                                            height: '100%',
+                                            display: 'grid',
+                                            placeItems: 'center',
+                                        }}
+                                    />
+                                </Box>
+                                <Stack spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+                                    <Typography variant="h6">
+                                        {index + 1}. {item.title}
                                     </Typography>
-                                )}
-                                <Typography>{item.reason}</Typography>
-                                {item.caveat && (
-                                    <Typography color="text.secondary">
-                                        {t`Considerations`}: {item.caveat}
-                                    </Typography>
-                                )}
-                                <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                                    {item.matches.map((match) => (
-                                        <Button
-                                            key={match.id}
-                                            component={Link}
-                                            to={AppRoutes.manga.path(match.id)}
-                                            variant="outlined"
-                                        >
-                                            {match.sourceName} · {match.language}
-                                            {match.inLibrary ? ` · ${t`In library`}` : ''}
-                                        </Button>
-                                    ))}
+                                    {!!item.aliases.length && (
+                                        <Typography variant="body2" color="text.secondary">
+                                            {item.aliases.join(' · ')}
+                                        </Typography>
+                                    )}
+                                    <Typography>{item.reason}</Typography>
+                                    {item.caveat && (
+                                        <Typography color="text.secondary">
+                                            {t`Considerations`}: {item.caveat}
+                                        </Typography>
+                                    )}
+                                    <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                                        {item.matches.map((match) => (
+                                            <Button
+                                                key={match.id}
+                                                component={Link}
+                                                to={AppRoutes.manga.path(match.id)}
+                                                variant="outlined"
+                                            >
+                                                {match.sourceName} · {match.language}
+                                                {' · '}
+                                                {chapterLabel(match)}
+                                                {match.chapterEntryCount !== null &&
+                                                match.chapterEntryCount !== match.chapterCount
+                                                    ? ` (${match.chapterEntryCount} ${t`Entries`})`
+                                                    : ''}
+                                                {match.inLibrary ? ` · ${t`In library`}` : ''}
+                                            </Button>
+                                        ))}
+                                    </Stack>
+                                    {!item.matches.length && (
+                                        <Typography color="text.secondary">
+                                            {job.finished
+                                                ? t`No matching listing found in the checked sources`
+                                                : t`No matching listing found yet`}
+                                        </Typography>
+                                    )}
+                                    <Button
+                                        component={Link}
+                                        to={AppRoutes.sources.children.searchAll.path(item.title)}
+                                        sx={{ alignSelf: 'flex-start' }}
+                                    >{t`Search this title manually`}</Button>
                                 </Stack>
-                                {!item.matches.length && (
-                                    <Typography color="text.secondary">
-                                        {job.finished
-                                            ? t`No matching listing found in the checked sources`
-                                            : t`No matching listing found yet`}
-                                    </Typography>
-                                )}
-                                <Button
-                                    component={Link}
-                                    to={AppRoutes.sources.children.searchAll.path(item.title)}
-                                    sx={{ alignSelf: 'flex-start' }}
-                                >{t`Search this title manually`}</Button>
                             </Stack>
                         </Paper>
                     ))}

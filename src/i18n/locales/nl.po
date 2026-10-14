@@ -1848,3 +1848,259 @@ msgstr "What would you like to read?"
 #: src/features/ai-search/AiSearch.tsx
 msgid "Your search request is sent to OpenAI when you start an AI search. The API is billed separately from ChatGPT. Manga pages and your library are not sent."
 msgstr "Your search request is sent to OpenAI when you start an AI search. The API is billed separately from ChatGPT. Manga pages and your library are not sent."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "AI search history"
+msgstr "AI search history"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "AI usage and balance"
+msgstr "AI usage and balance"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Admin key removed"
+msgstr "Admin key removed"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "After"
+msgstr "After"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Average per search"
+msgstr "Average per search"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Balance checkpoint saved"
+msgstr "Balance checkpoint saved"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Before"
+msgstr "Before"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Billed total for retrieved period"
+msgstr "Billed total for retrieved period"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Billing connection saved"
+msgstr "Billing connection saved"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Billing totals may be delayed. They are shown separately and are not subtracted again from the local balance estimate."
+msgstr "Billing totals may be delayed. They are shown separately and are not subtracted again from the local balance estimate."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Chapter count unknown"
+msgstr "Chapter count unknown"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Cost period in days"
+msgstr "Cost period in days"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Current balance in USD"
+msgstr "Current balance in USD"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Days"
+msgstr "Days"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Enter the current amount shown in OpenAI after other usage or a top-up. This creates a new checkpoint and preserves all previous search records."
+msgstr "Enter the current amount shown in OpenAI after other usage or a top-up. This creates a new checkpoint and preserves all previous search records."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Entire organization"
+msgstr "Entire organization"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Entries"
+msgstr "Entries"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Estimated balance after search"
+msgstr "Estimated balance after search"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Estimated balance before search"
+msgstr "Estimated balance before search"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Estimated remaining balance"
+msgstr "Estimated remaining balance"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Estimated search cost"
+msgstr "Estimated search cost"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Estimated spend since that balance"
+msgstr "Estimated spend since that balance"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Export CSV"
+msgstr "Export CSV"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Interrupted by restart"
+msgstr "Interrupted by restart"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Last manually entered balance"
+msgstr "Last manually entered balance"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Leave empty to retrieve costs for the entire organization."
+msgstr "Leave empty to retrieve costs for the entire organization."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Loading chapters"
+msgstr "Loading chapters"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Local cache"
+msgstr "Local cache"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "No AI searches have been recorded yet."
+msgstr "No AI searches have been recorded yet."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Official OpenAI costs"
+msgstr "Official OpenAI costs"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Open OpenAI billing"
+msgstr "Open OpenAI billing"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "OpenAI cached input tokens"
+msgstr "OpenAI cached input tokens"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "OpenAI costs retrieved"
+msgstr "OpenAI costs retrieved"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "OpenAI response ID"
+msgstr "OpenAI response ID"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Optional OpenAI admin key"
+msgstr "Optional OpenAI admin key"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Optional OpenAI project ID"
+msgstr "Optional OpenAI project ID"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Paid searches"
+msgstr "Paid searches"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Price basis"
+msgstr "Price basis"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Prompts and results are stored privately on the NAS from this version onward. Searches made before tracking was installed cannot be reconstructed."
+msgstr "Prompts and results are stored privately on the NAS from this version onward. Searches made before tracking was installed cannot be reconstructed."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Reason for balance update"
+msgstr "Reason for balance update"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Reasoning tokens"
+msgstr "Reasoning tokens"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Reasoning tokens are included in output tokens and are not charged twice. Each search retains its original price basis. Local answer-cache hits cost zero."
+msgstr "Reasoning tokens are included in output tokens and are not charged twice. Each search retains its original price basis. Local answer-cache hits cost zero."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Recommended titles"
+msgstr "Recommended titles"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Remove admin key"
+msgstr "Remove admin key"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Retrieve OpenAI costs"
+msgstr "Retrieve OpenAI costs"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Retrieved at"
+msgstr "Retrieved at"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Save balance checkpoint"
+msgstr "Save balance checkpoint"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Save billing connection"
+msgstr "Save billing connection"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Searches"
+msgstr "Searches"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Some API requests have no final token usage. Their cost is unknown and is not subtracted from this estimate."
+msgstr "Some API requests have no final token usage. Their cost is unknown and is not subtracted from this estimate."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Source matches"
+msgstr "Source matches"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Standard USD prices per million tokens, checked on"
+msgstr "Standard USD prices per million tokens, checked on"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "The official Costs API returns daily billed totals, not your remaining credit or a bill for each prompt. It requires a separate OpenAI admin key with usage read permission."
+msgstr "The official Costs API returns daily billed totals, not your remaining credit or a bill for each prompt. It requires a separate OpenAI admin key with usage read permission."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "This balance comparison is incomplete because at least one API request has unknown cost."
+msgstr "This balance comparison is incomplete because at least one API request has unknown cost."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "This is a local estimate, not a live prepaid balance from OpenAI. Other API usage, top-ups, refunds and expiring credits are not detected automatically."
+msgstr "This is a local estimate, not a live prepaid balance from OpenAI. Other API usage, top-ups, refunds and expiring credits are not detected automatically."
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Total estimated cost"
+msgstr "Total estimated cost"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Update manual balance"
+msgstr "Update manual balance"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Average per search with known cost"
+msgstr "Average per search with known cost"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Requests with unknown cost"
+msgstr "Requests with unknown cost"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Chapters"
+msgstr "Chapters"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Next page"
+msgstr "Next page"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Previous page"
+msgstr "Previous page"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Prompt"
+msgstr "Prompt"
+
+#: src/features/ai-search/AiUsage.tsx
+msgid "Sources"
+msgstr "Sources"

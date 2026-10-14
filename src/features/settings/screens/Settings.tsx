@@ -23,6 +23,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import ImageIcon from '@mui/icons-material/Image';
 import SystemUpdateAltIcon from '@mui/icons-material/SystemUpdateAlt';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { useLingui } from '@lingui/react/macro';
 import { ListItemLink } from '@/base/components/lists/ListItemLink.tsx';
 import { AppRoutes } from '@/base/AppRoute.constants.ts';
@@ -112,6 +113,12 @@ export function Settings() {
                     <AutoAwesomeIcon />
                 </ListItemIcon>
                 <ListItemText primary={t`AI settings`} />
+            </ListItemLink>
+            <ListItemLink to={AppRoutes.settings.children.aiUsage.path}>
+                <ListItemIcon>
+                    <ReceiptLongIcon />
+                </ListItemIcon>
+                <ListItemText primary={t`AI usage and balance`} />
             </ListItemLink>
             <ListItemLink to={AppRoutes.settings.children.server.path}>
                 <ListItemIcon>

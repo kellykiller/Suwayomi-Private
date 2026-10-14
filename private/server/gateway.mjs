@@ -187,6 +187,17 @@ export function createGateway({
                         return json(res, 200, await ai.status());
                     if (req.method === 'GET' && url.pathname === '/private-api/ai/active')
                         return json(res, 200, { job: ai.active(req) });
+                    if (req.method === 'GET' && url.pathname === '/private-api/ai/usage')
+                        return json(res, 200, await ai.usage());
+                    if (req.method === 'GET' && url.pathname === '/private-api/ai/history')
+                        return json(
+                            res,
+                            200,
+                            await ai.history(
+                                Number(url.searchParams.get('offset') || 0),
+                                Number(url.searchParams.get('limit') || 25),
+                            ),
+                        );
                     const id = url.pathname.match(/^\/private-api\/ai\/jobs\/([a-f0-9-]{36})$/)?.[1];
                     if (req.method === 'GET' && id) return json(res, 200, ai.get(id, req));
                     if (req.method !== 'POST') return json(res, 404, { error: 'Unbekannte KI-Aktion.' });
@@ -198,6 +209,9 @@ export function createGateway({
                     if (url.pathname === '/private-api/ai/settings') return json(res, 200, await ai.save(input));
                     if (url.pathname === '/private-api/ai/test') return json(res, 200, await ai.testConnection());
                     if (url.pathname === '/private-api/ai/search') return json(res, 202, await ai.start(input, req));
+                    if (url.pathname === '/private-api/ai/balance') return json(res, 200, await ai.setBalance(input));
+                    if (url.pathname === '/private-api/ai/billing') return json(res, 200, await ai.saveBilling(input));
+                    if (url.pathname === '/private-api/ai/costs') return json(res, 200, await ai.syncCosts(input.days));
                     if (url.pathname === '/private-api/ai/cancel') {
                         assert(jobIdValid(input.id), 'Ungültige Suchkennung.');
                         return json(res, 200, ai.cancel(input.id, req));

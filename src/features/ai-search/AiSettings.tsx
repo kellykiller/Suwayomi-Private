@@ -176,6 +176,7 @@ export function AiSettings() {
                 </Paper>
             )}
             <Button component={Link} to={AppRoutes.sources.children.aiSearch.path}>{t`Open AI search`}</Button>
+            <Button component={Link} to={AppRoutes.settings.children.aiUsage.path}>{t`AI usage and balance`}</Button>
         </Stack>
     );
 }

@@ -34,7 +34,14 @@ export type AiSearchJob = {
     notice: string;
     error: string;
     cached: boolean;
-    usage: { inputTokens: number; outputTokens: number } | null;
+    usage: { inputTokens: number; outputTokens: number; cachedInputTokens?: number; reasoningTokens?: number } | null;
+    accounting?: {
+        costUsd: number | null;
+        costUnknown: boolean;
+        balanceBeforeUsd: number;
+        balanceAfterUsd: number | null;
+        balanceUncertain: boolean;
+    };
     checkedQueries: number;
     completedSources: number;
     sources: AiSourceProgress[];
@@ -50,8 +57,77 @@ export type AiSearchJob = {
             sourceId: string;
             sourceName: string;
             language: string;
+            thumbnailUrl: string | null;
+            thumbnailUrlLastFetched: string | null;
+            chapterCount: number | null;
+            chapterEntryCount: number | null;
+            detailsPhase: 'loading' | 'ready' | 'failed' | 'interrupted';
         }[];
     }[];
+};
+export type AiHistoryEntry = {
+    id: string;
+    started: string;
+    finished: string | null;
+    phase: string;
+    prompt: string;
+    language: string;
+    model: string;
+    actualModel?: string;
+    reasoning: string;
+    resultCount: number;
+    sources: { id: string; name: string; language: string }[];
+    usage: AiSearchJob['usage'];
+    cached: boolean;
+    costUsd: number | null;
+    costUnknown: boolean;
+    balanceBeforeUsd: number;
+    balanceAfterUsd: number | null;
+    balanceUncertain: boolean;
+    responseId: string | null;
+    error: string;
+    result: {
+        summary: string;
+        checkedQueries: number;
+        completedSources: number;
+        recommendations: AiSearchJob['recommendations'];
+    } | null;
+};
+export type AiHistoryPage = { entries: AiHistoryEntry[]; total: number; offset: number; nextOffset: number | null };
+export type AiBillingSnapshot = {
+    fetchedAt: string;
+    start: number;
+    end: number;
+    projectId: string;
+    days: number;
+    totalUsd: number;
+    buckets: { start: number; end: number; usd: number }[];
+};
+export type AiUsageData = {
+    balance: {
+        anchor: { at: string; amountUsd: number; note: string };
+        estimatedUsd: number;
+        knownSpendUsd: number;
+        unknownCosts: number;
+        pendingCosts: number;
+    };
+    totals: {
+        searches: number;
+        cached: number;
+        paid: number;
+        unknown: number;
+        pending: number;
+        estimatedCostUsd: number;
+        averageUsd: number | null;
+        inputTokens: number;
+        outputTokens: number;
+        cachedInputTokens: number;
+        reasoningTokens: number;
+    };
+    rates: Record<string, { input: number; cachedInput: number; output: number }>;
+    priceDate: string;
+    checkpoints: { at: string; amountUsd: number; note: string }[];
+    billing: { configured: boolean; projectId: string; last: AiBillingSnapshot | null };
 };
 
 export class AiApiError extends Error {

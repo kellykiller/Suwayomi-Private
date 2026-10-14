@@ -50,6 +50,10 @@ export const AppRoutes = {
         match: 'settings',
         path: '/settings',
         children: {
+            aiUsage: {
+                match: 'ai-usage',
+                path: '/settings/ai-usage',
+            },
             ai: {
                 match: 'ai',
                 path: '/settings/ai',

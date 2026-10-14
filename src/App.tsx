@@ -80,6 +80,7 @@ const { BrowseSettings } = loadable(() => import('@/features/browse/screens/Brow
 const { WebUISettings } = loadable(() => import('@/features/settings/screens/WebUISettings.tsx'), lazyLoadFallback);
 const { PrivateUpdates } = loadable(() => import('@/features/private-updates/PrivateUpdates.tsx'), lazyLoadFallback);
 const { AiSettings } = loadable(() => import('@/features/ai-search/AiSettings.tsx'), lazyLoadFallback);
+const { AiUsage } = loadable(() => import('@/features/ai-search/AiUsage.tsx'), lazyLoadFallback);
 const { AiSearch } = loadable(() => import('@/features/ai-search/AiSearch.tsx'), lazyLoadFallback);
 const { Migration } = loadable(() => import('@/features/migration/screens/Migration.tsx'), lazyLoadFallback);
 const { DeviceSetting } = loadable(() => import('@/features/device/screens/DeviceSetting.tsx'), lazyLoadFallback);
@@ -332,6 +333,7 @@ const MainApp = () => {
                             <Route path={AppRoutes.settings.children.server.match} element={<ServerSettings />} />
                             <Route path={AppRoutes.settings.children.webui.match} element={<WebUISettings />} />
                             <Route path={AppRoutes.settings.children.ai.match} element={<AiSettings />} />
+                            <Route path={AppRoutes.settings.children.aiUsage.match} element={<AiUsage />} />
                             <Route
                                 path={AppRoutes.settings.children.privateUpdates.match}
                                 element={<PrivateUpdates />}
