@@ -4054,3 +4054,7 @@ msgstr "Save API keys"
 #: src/features/private-updates/PrivateUpdates.tsx
 msgid "API keys saved"
 msgstr "API keys saved"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Check for updates"
+msgstr "Check for updates"

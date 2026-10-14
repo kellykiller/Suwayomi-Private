@@ -4703,3 +4703,7 @@ msgstr "API-Schlüssel speichern"
 #: src/features/private-updates/PrivateUpdates.tsx
 msgid "API keys saved"
 msgstr "API-Schlüssel gespeichert"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Check for updates"
+msgstr "Updates prüfen"
