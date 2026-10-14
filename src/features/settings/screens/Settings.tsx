@@ -24,6 +24,7 @@ import ImageIcon from '@mui/icons-material/Image';
 import SystemUpdateAltIcon from '@mui/icons-material/SystemUpdateAlt';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import TranslateIcon from '@mui/icons-material/Translate';
 import { useLingui } from '@lingui/react/macro';
 import { ListItemLink } from '@/base/components/lists/ListItemLink.tsx';
 import { AppRoutes } from '@/base/AppRoute.constants.ts';
@@ -119,6 +120,12 @@ export function Settings() {
                     <ReceiptLongIcon />
                 </ListItemIcon>
                 <ListItemText primary={t`AI usage and balance`} />
+            </ListItemLink>
+            <ListItemLink to={AppRoutes.settings.children.translations.path}>
+                <ListItemIcon>
+                    <TranslateIcon />
+                </ListItemIcon>
+                <ListItemText primary="Kapitelübersetzung" />
             </ListItemLink>
             <ListItemLink to={AppRoutes.settings.children.server.path}>
                 <ListItemIcon>

@@ -79,7 +79,7 @@ export function createAiLedger({ stateRoot = '/update', initialBalance = 2.31 } 
                     const entry = JSON.parse(row.payload);
                     entry.phase = 'interrupted';
                     entry.finished = new Date().toISOString();
-                    entry.error = 'Dienst wurde während der Suche neu gestartet.';
+                    entry.error = 'Dienst wurde während des KI-Auftrags neu gestartet.';
                     const state = row.api_state === 'pending' ? 'unknown' : row.api_state;
                     entry.costUnknown = state === 'unknown';
                     database
@@ -143,6 +143,12 @@ export function createAiLedger({ stateRoot = '/update', initialBalance = 2.31 } 
         const before = balance(db);
         const entry = {
             id: job.id,
+            kind: job.kind || 'search',
+            translationJobId: job.translationJobId || null,
+            chapter: job.chapter || null,
+            stage: job.stage || null,
+            instructions: job.instructions || null,
+            images: job.images || [],
             started: job.started,
             finished: null,
             phase: 'planning',
@@ -236,15 +242,23 @@ export function createAiLedger({ stateRoot = '/update', initialBalance = 2.31 } 
             entry.finished = job.finished;
             entry.error = job.error;
             if (row.api_state === 'pending') row.api_state = 'unknown';
-            entry.result = {
-                summary: job.summary,
-                criteria: job.criteria,
-                notice: job.notice,
-                checkedQueries: job.checkedQueries,
-                completedSources: job.completedSources,
-                sources: job.sources,
-                recommendations: job.recommendations,
-            };
+            entry.result =
+                job.kind === 'translation'
+                    ? {
+                          summary: job.summary || 'Kapitelübersetzung',
+                          checkedQueries: 0,
+                          completedSources: 0,
+                          recommendations: [],
+                      }
+                    : {
+                          summary: job.summary,
+                          criteria: job.criteria,
+                          notice: job.notice,
+                          checkedQueries: job.checkedQueries,
+                          completedSources: job.completedSources,
+                          sources: job.sources,
+                          recommendations: job.recommendations,
+                      };
         });
     async function setBalance(input) {
         assert(
@@ -306,6 +320,11 @@ export function createAiLedger({ stateRoot = '/update', initialBalance = 2.31 } 
         finish,
         setBalance,
         history,
+        entry: async (id) => {
+            const db = await open();
+            const row = db.prepare('SELECT payload FROM searches WHERE id=?').get(id);
+            return row ? JSON.parse(row.payload) : null;
+        },
         stage: (id, phase) =>
             mutate(id, (entry) => {
                 entry.phase = phase;

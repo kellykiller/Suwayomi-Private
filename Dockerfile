@@ -12,6 +12,14 @@ RUN node --import tsx tools/scripts/setupEnvFiles.ts && pnpm exec vite build
 FROM node:24-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production NODE_OPTIONS=--dns-result-order=ipv4first
+COPY private/translation/requirements.txt /tmp/ocr-requirements.txt
+RUN apt-get update && apt-get install --no-install-recommends -y python3 python3-venv libglib2.0-0 libgl1 libgomp1 fonts-dejavu-core ca-certificates \
+    && python3 -m venv /opt/ocr \
+    && /opt/ocr/bin/pip install --no-cache-dir torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cpu \
+    && /opt/ocr/bin/pip install --no-cache-dir -r /tmp/ocr-requirements.txt \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+COPY private/translation/download_models.py /tmp/download_models.py
+RUN /opt/ocr/bin/python /tmp/download_models.py
 COPY --from=build /source/build ./build
 COPY --from=build /source/private ./private
 COPY LICENSE ./

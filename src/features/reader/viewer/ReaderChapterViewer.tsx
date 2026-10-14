@@ -45,6 +45,7 @@ import type { ChapterIdInfo } from '@/features/chapter/Chapter.types.ts';
 import { READER_DEFAULT_PAGES_STATE } from '@/features/reader/stores/ReaderPagesStore.ts';
 
 import { getReaderChaptersStore, getReaderPagesStore } from '@/features/reader/stores/ReaderStore.ts';
+import { useTranslationReader } from '@/features/translation/TranslationReader.tsx';
 
 const BaseReaderChapterViewer = ({
     currentPageIndex,
@@ -114,6 +115,7 @@ const BaseReaderChapterViewer = ({
     const { direction: themeDirection } = useTheme();
 
     const [fetchPages, pagesResponse] = requestManager.useGetChapterPagesFetch(chapterId ?? -1);
+    const translation = useTranslationReader(chapterId);
 
     const [arePagesFetched, setArePagesFetched] = useState(false);
     const [totalPages, setTotalPages] = useState<ReaderStatePages['totalPages']>(READER_DEFAULT_PAGES_STATE.totalPages);
@@ -175,13 +177,16 @@ const BaseReaderChapterViewer = ({
         if (!chapterId) {
             return;
         }
+        if (translation.loading || translation.pages) {
+            return;
+        }
 
         setArePagesFetched(false);
 
         fetchPages({ variables: { input: { chapterId } } }).catch(
             defaultPromiseErrorHandler(`ReaderChapterViewer(${chapterId})::fetchPages`),
         );
-    }, [fetchPages, chapterId]);
+    }, [fetchPages, chapterId, translation.loading, translation.pages]);
 
     const onLoad = useMemo(
         () =>
@@ -256,7 +261,8 @@ const BaseReaderChapterViewer = ({
     };
     useReaderSetPagesState(
         isCurrentChapter,
-        pagesResponse,
+        translation.pages || pagesResponse.data?.fetchChapterPages?.pages,
+        !!translation.pages,
         resumeMode,
         lastPageRead,
         actualPages,
@@ -317,7 +323,7 @@ const BaseReaderChapterViewer = ({
         return null;
     }
 
-    if (pagesResponse.error) {
+    if (pagesResponse.error && !translation.pages) {
         if (shouldHideChapter) {
             return null;
         }
@@ -343,7 +349,7 @@ const BaseReaderChapterViewer = ({
         );
     }
 
-    if (pagesResponse.loading || !arePagesFetched) {
+    if (translation.loading || (pagesResponse.loading && !translation.pages) || !arePagesFetched) {
         if (shouldHideChapter) {
             return null;
         }

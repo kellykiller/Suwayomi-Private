@@ -625,6 +625,8 @@ export function createAiService({
         return snapshot(job);
     }
     return {
+        ledger,
+        busy: () => saving || [...jobs.values()].some((job) => !job.finished),
         status,
         save,
         testConnection,

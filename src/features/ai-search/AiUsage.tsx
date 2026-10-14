@@ -118,6 +118,12 @@ export function AiUsage() {
     const exportCsv = async () => {
         const rows: unknown[][] = [
             [
+                'Art',
+                'Manga',
+                'Kapitel',
+                'Schritt',
+                'Übersetzungsanweisung',
+                'Kontextbild-Prüfsummen',
                 t`Started`,
                 t`Finished`,
                 t`Prompt`,
@@ -150,6 +156,12 @@ export function AiUsage() {
                 }
                 exportedIds.add(entry.id);
                 rows.push([
+                    entry.kind || 'search',
+                    entry.chapter?.title,
+                    entry.chapter?.name,
+                    entry.stage,
+                    entry.instructions,
+                    entry.images?.map((image) => image.sha256).join(' | '),
                     entry.started,
                     entry.finished,
                     entry.prompt,
@@ -228,12 +240,8 @@ export function AiUsage() {
                     </Paper>
                     <Paper variant="outlined" sx={{ p: 2 }}>
                         <Stack direction="row" spacing={2} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                            <Typography>
-                                {t`Searches`}: {usage.totals.searches}
-                            </Typography>
-                            <Typography>
-                                {t`Paid searches`}: {usage.totals.paid}
-                            </Typography>
+                            <Typography>Erfasste KI-Aufträge: {usage.totals.searches}</Typography>
+                            <Typography>Kostenpflichtige Aufträge: {usage.totals.paid}</Typography>
                             <Typography>
                                 {t`Local cache`}: {usage.totals.cached}
                             </Typography>
@@ -241,7 +249,7 @@ export function AiUsage() {
                                 {t`Total estimated cost`}: {money(usage.totals.estimatedCostUsd)}
                             </Typography>
                             <Typography>
-                                {t`Average per search with known cost`}: {money(usage.totals.averageUsd)}
+                                Durchschnitt je Auftrag mit bekannten Kosten: {money(usage.totals.averageUsd)}
                             </Typography>
                             <Typography>
                                 {t`Requests with unknown cost`}: {usage.totals.unknown}
@@ -407,7 +415,7 @@ export function AiUsage() {
                 </>
             )}
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-                <Typography variant="h6">{t`AI search history`}</Typography>
+                <Typography variant="h6">KI-Nutzungshistorie</Typography>
                 <Button
                     disabled={pending || !history?.total}
                     onClick={() => {
@@ -421,14 +429,22 @@ export function AiUsage() {
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                         <Stack spacing={1} sx={{ width: '100%' }}>
                             <Typography>
-                                {date(entry.started)} · {entry.model} · {phases[entry.phase] || entry.phase}
+                                {date(entry.started)} · {entry.model} ·{' '}
+                                {entry.kind === 'translation' && entry.phase === 'completed'
+                                    ? 'Abgeschlossen'
+                                    : phases[entry.phase] || entry.phase}
                             </Typography>
+                            {entry.kind === 'translation' && (
+                                <Typography color="primary">
+                                    Übersetzung · {entry.chapter?.title} – {entry.chapter?.name} · {entry.stage}
+                                </Typography>
+                            )}
                             <Typography sx={{ overflowWrap: 'anywhere' }}>
                                 {entry.prompt.length > 160 ? `${entry.prompt.slice(0, 160)}…` : entry.prompt}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                                {t`Estimated search cost`}: {money(entry.costUsd)} · {t`Before`}:{' '}
-                                {money(entry.balanceBeforeUsd)} → {t`After`}: {money(entry.balanceAfterUsd)}
+                                Geschätzte Kosten: {money(entry.costUsd)} · {t`Before`}: {money(entry.balanceBeforeUsd)}{' '}
+                                → {t`After`}: {money(entry.balanceAfterUsd)}
                                 {entry.cached ? ` · ${t`Local cache`}` : ''}
                             </Typography>
                         </Stack>
@@ -439,6 +455,17 @@ export function AiUsage() {
                             <Typography sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
                                 {entry.prompt}
                             </Typography>
+                            {entry.instructions && (
+                                <Typography sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }} variant="body2">
+                                    Übersetzungsanweisung: {entry.instructions}
+                                </Typography>
+                            )}
+                            {!!entry.images?.length && (
+                                <Typography variant="caption">
+                                    {entry.images.length} Kontextbilder übertragen; Bild-Prüfsummen sind lokal
+                                    protokolliert.
+                                </Typography>
+                            )}
                             <Typography color="text.secondary">
                                 {t`Reasoning effort`}: {entry.reasoning} · {t`Maximum recommendations`}:{' '}
                                 {entry.resultCount} · {t`Sources`}:{' '}

@@ -45,6 +45,9 @@ import type {
 import { IconWebView } from '@/assets/icons/IconWebView.tsx';
 import { IconBrowser } from '@/assets/icons/IconBrowser.tsx';
 import CancelIcon from '@mui/icons-material/Cancel';
+import TranslateIcon from '@mui/icons-material/Translate';
+import { useNavigate } from 'react-router-dom';
+import { translationPath } from '@/features/translation/Translation.api.ts';
 
 type BaseProps = { onClose: () => void; selectable?: boolean };
 
@@ -78,6 +81,7 @@ export const ChapterActionMenuItems = ({
     selectable = true,
 }: Props) => {
     const { t } = useLingui();
+    const navigate = useNavigate();
 
     const isSingleMode = !!chapter;
     const { isDownloaded, isRead, isBookmarked } = chapter ?? STABLE_EMPTY_OBJECT;
@@ -182,6 +186,15 @@ export const ChapterActionMenuItems = ({
             )}
             {isSingleMode && (
                 <>
+                    <MenuItem
+                        Icon={TranslateIcon}
+                        disabled={!isDownloaded}
+                        title="Übersetzen"
+                        onClick={() => {
+                            navigate(translationPath(chapter!.id));
+                            onClose();
+                        }}
+                    />
                     <MenuItem
                         Icon={IconBrowser}
                         disabled={!chapter!.realUrl}

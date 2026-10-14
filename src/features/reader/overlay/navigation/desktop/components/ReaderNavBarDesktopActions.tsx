@@ -32,6 +32,7 @@ import type { ChapterDownloadInfo, ChapterIdInfo } from '@/features/chapter/Chap
 import { defaultPromiseErrorHandler } from '@/lib/DefaultPromiseErrorHandler.ts';
 import ShareIcon from '@mui/icons-material/Share';
 import { ShareGuard } from '@/base/components/guard/ShareGuard.tsx';
+import { TranslationReaderActions } from '@/features/translation/TranslationReader.tsx';
 
 const DownloadButton = ({ id = -1, isDownloaded }: ChapterIdInfo & ChapterDownloadInfo) => {
     const { t } = useLingui();
@@ -91,6 +92,7 @@ export const ReaderNavBarDesktopActions = memo(() => {
         <Stack sx={{ flexDirection: 'row', justifyContent: 'center', gap: 1 }}>
             <ReaderLibraryButton />
             <ReaderBookmarkButton id={id} isBookmarked={isBookmarked} />
+            <TranslationReaderActions chapterId={id} />
             <CustomTooltip title={t`Retry errored pages`} disabled={!haveSomePagesFailedToLoad}>
                 <IconButton
                     onClick={() => {

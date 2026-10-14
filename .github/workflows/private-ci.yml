@@ -12,7 +12,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     env:
       HUSKY: '0'
     steps:
@@ -29,6 +29,12 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install Pillow==12.3.0 numpy==2.2.6
+      - run: python -m unittest discover -s private/translation -p 'test_*.py'
       - run: sh -n deploy/nas-install.sh
       - run: node --import tsx tools/scripts/setupEnvFiles.ts && pnpm exec vite build
       - run: docker build --build-arg PRIVATE_COMMIT=${{ github.sha }} -t suwayomi-private:ci .
+      - run: docker run --rm --network none --entrypoint /opt/ocr/bin/python suwayomi-private:ci /app/private/translation/smoke.py

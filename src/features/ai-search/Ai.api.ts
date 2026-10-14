@@ -67,6 +67,11 @@ export type AiSearchJob = {
 };
 export type AiHistoryEntry = {
     id: string;
+    kind?: 'search' | 'translation';
+    chapter?: { id: number; title: string; name: string } | null;
+    stage?: string | null;
+    instructions?: string | null;
+    images?: { sha256: string }[];
     started: string;
     finished: string | null;
     phase: string;

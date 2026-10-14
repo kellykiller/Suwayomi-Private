@@ -16,15 +16,15 @@ import type {
     ReaderStatePages,
 } from '@/features/reader/Reader.types.ts';
 import { ReaderTransitionPageMode } from '@/features/reader/Reader.types.ts';
-import type { requestManager } from '@/lib/requests/RequestManager.ts';
 import type { TChapterReader } from '@/features/chapter/Chapter.types.ts';
 import type { ReaderChaptersStoreSlice } from '@/features/reader/stores/ReaderChaptersStore.ts';
-import { getReaderStore } from '@/features/reader/stores/ReaderStore.ts';
+import { getReaderStore, getReaderPagesStore } from '@/features/reader/stores/ReaderStore.ts';
 import { UrlUtil } from '@/lib/UrlUtil.ts';
 
 export const useReaderSetPagesState = (
     isCurrentChapter: boolean,
-    pagesResponse: ReturnType<typeof requestManager.useGetChapterPagesFetch>[1],
+    sourcePageUrls: string[] | undefined,
+    isTranslated: boolean,
     resumeMode: ReaderResumeMode,
     lastPageRead: TChapterReader['lastPageRead'] | undefined,
     pages: ReaderStatePages['pages'],
@@ -45,23 +45,30 @@ export const useReaderSetPagesState = (
     setTransitionPageMode: ReaderStatePages['setTransitionPageMode'],
 ) => {
     const previousPageData = useRef<string[]>(undefined);
+    const previousView = useRef({ translated: isTranslated, current: isCurrentChapter });
 
     useLayoutEffect(() => {
-        const pagesPayload = pagesResponse.data?.fetchChapterPages;
-        if (!pagesPayload) {
+        if (!sourcePageUrls) {
             return;
         }
 
-        const { pages: pagesFromResponse } = pagesPayload;
+        const pagesFromResponse = sourcePageUrls;
         const tmpPages = pagesFromResponse.length ? pagesFromResponse : [''];
         const newPages = tmpPages.map((page) =>
             UrlUtil.addParams(page, { sourceId: getReaderStore().manga?.sourceId }),
         );
-        const initialReaderPageIndex = getInitialReaderPageIndex(resumeMode, lastPageRead ?? 0, newPages.length - 1);
+        const isLanguageToggle =
+            previousPageData.current &&
+            isCurrentChapter &&
+            previousView.current.current &&
+            previousView.current.translated !== isTranslated;
+        const initialReaderPageIndex = isLanguageToggle
+            ? Math.min(getReaderPagesStore().currentPageIndex, newPages.length - 1)
+            : getInitialReaderPageIndex(resumeMode, lastPageRead ?? 0, newPages.length - 1);
 
-        const didPagesChange = previousPageData.current !== pagesPayload?.pages;
+        const didPagesChange = previousPageData.current !== sourcePageUrls;
         if (didPagesChange) {
-            previousPageData.current = pagesPayload.pages;
+            previousPageData.current = sourcePageUrls;
             const newPageData = createPagesData(newPages);
 
             setArePagesFetched(true);
@@ -77,7 +84,7 @@ export const useReaderSetPagesState = (
             setPageBackgroundColors(pageBackgroundColors);
         }
 
-        setTotalPages(pagesPayload.pages.length);
+        setTotalPages(sourcePageUrls.length);
         setPageUrls(newPages);
         setCurrentPageIndex(initialReaderPageIndex);
         setPageToScrollToIndex(initialReaderPageIndex);
@@ -87,5 +94,6 @@ export const useReaderSetPagesState = (
         }));
 
         setTransitionPageMode(ReaderTransitionPageMode.NONE);
-    }, [pagesResponse.data?.fetchChapterPages?.pages, isCurrentChapter]);
+        previousView.current = { translated: isTranslated, current: isCurrentChapter };
+    }, [sourcePageUrls, isCurrentChapter, isTranslated]);
 };

@@ -36,6 +36,8 @@ import {
 } from '@/features/reader/stores/ReaderStore.ts';
 import { defaultPromiseErrorHandler } from '@/lib/DefaultPromiseErrorHandler.ts';
 import { ShareGuard } from '@/base/components/guard/ShareGuard.tsx';
+import { TranslationReaderActions } from '@/features/translation/TranslationReader.tsx';
+import { translationPath } from '@/features/translation/Translation.api.ts';
 
 const DEFAULT_MANGA = { ...FALLBACK_MANGA, title: '' };
 
@@ -92,10 +94,14 @@ const BaseReaderOverlayHeaderMobile = ({ isVisible, ref }: MobileHeaderProps & {
                 </Stack>
                 <ReaderLibraryButton />
                 <ReaderBookmarkButton id={chapterId} isBookmarked={isBookmarked} />
+                <TranslationReaderActions chapterId={chapterId} />
                 <IconButton {...bindTrigger(popupState)} color="inherit">
                     <MoreVertIcon />
                 </IconButton>
                 <Menu {...bindMenu(popupState)}>
+                    <MenuItem component={RouterLink} to={translationPath(chapterId)} onClick={popupState.close}>
+                        Kapitelübersetzung
+                    </MenuItem>
                     <MenuItem
                         component={Link}
                         disabled={!realUrl}

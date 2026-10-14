@@ -26,6 +26,8 @@ import {
 } from './common.mjs';
 import { activeJob, createJob, jobIdValid } from './worker.mjs';
 import { createAiService } from './ai.mjs';
+import { createTranslationService } from './translation.mjs';
+import { createImageWorker } from './translation-worker.mjs';
 
 const hop = new Set([
     'connection',
@@ -69,13 +71,13 @@ function json(res, status, value) {
     });
     res.end(JSON.stringify(value));
 }
-async function body(req) {
+async function body(req, maximum = 16384) {
     assert((req.headers['content-type'] || '').startsWith('application/json'), 'JSON erforderlich.');
     const chunks = [];
     let size = 0;
     for await (const chunk of req) {
         size += chunk.length;
-        assert(size <= 16384, 'Anfrage ist zu groß.');
+        assert(size <= maximum, 'Anfrage ist zu groß.');
         chunks.push(chunk);
     }
     const value = JSON.parse(Buffer.concat(chunks).toString());
@@ -128,6 +130,7 @@ export function createGateway({
     stateExists = exists,
     stateRead = readJson,
     aiService,
+    translationService,
 } = {}) {
     const target = new URL(upstream);
     assert(
@@ -135,6 +138,32 @@ export function createGateway({
         'Ungültiges internes Suwayomi-Ziel.',
     );
     const ai = aiService || createAiService({ upstream: target, fetchImpl });
+    const translations =
+        translationService ||
+        createTranslationService({
+            upstream: target,
+            fetchImpl,
+            ledger: ai.ledger,
+            aiBusy: () => ai.busy?.() || false,
+            updateBusy: jobReader,
+            imageWorker: createImageWorker({
+                connection: async () => {
+                    const config = await configLoader();
+                    const keys = await secretLoader();
+                    return { config, api: portainerClient(config.portainerUrl, keys.portainer, fetchImpl) };
+                },
+            }),
+        });
+    let startingAiAction = false;
+    const startAiAction = async (action) => {
+        assert(!startingAiAction, 'Eine KI-Aktion wird bereits vorbereitet.');
+        startingAiAction = true;
+        try {
+            return await action();
+        } finally {
+            startingAiAction = false;
+        }
+    };
     const server = http.createServer(async (req, res) => {
         try {
             assert(
@@ -182,6 +211,52 @@ export function createGateway({
                         error: 'Die privaten Funktionen benötigen die bestehende Suwayomi-Basic-Auth-Anmeldung.',
                     });
                 const config = await configLoader();
+                if (url.pathname.startsWith('/private-api/translations/')) {
+                    if (req.method === 'GET' && url.pathname === '/private-api/translations/jobs')
+                        return json(res, 200, { jobs: await translations.list() });
+                    const chapterId = url.pathname.match(/^\/private-api\/translations\/chapter\/(\d+)$/)?.[1];
+                    if (req.method === 'GET' && chapterId) {
+                        const info = await translations.chapter(Number(chapterId), req);
+                        return json(res, 200, {
+                            chapter: info,
+                            available: await translations.available(Number(chapterId), info),
+                        });
+                    }
+                    const id = url.pathname.match(/^\/private-api\/translations\/jobs\/([a-f0-9-]{36})$/)?.[1];
+                    if (req.method === 'GET' && id) return json(res, 200, await translations.get(id));
+                    const file = url.pathname.match(
+                        /^\/private-api\/translations\/files\/([a-f0-9-]{36})\/(original|translated|preview)\/(\d+)$/,
+                    );
+                    if (req.method === 'GET' && file) {
+                        const image = await translations.file(file[1], file[2], Number(file[3]));
+                        const info = await fs.stat(image.path);
+                        res.writeHead(200, {
+                            'Content-Type': image.type,
+                            'Content-Length': info.size,
+                            'Cache-Control': 'private, no-cache',
+                            'X-Content-Type-Options': 'nosniff',
+                        });
+                        createReadStream(image.path)
+                            .on('error', () => res.destroy())
+                            .pipe(res);
+                        return;
+                    }
+                    if (req.method !== 'POST') return json(res, 404, { error: 'Unbekannte Übersetzungsaktion.' });
+                    if (!sameOrigin(req, config.origins))
+                        return json(res, 403, {
+                            error: 'Übersetzung muss von derselben Suwayomi-Seite gestartet werden.',
+                        });
+                    const input = await body(req, 256 * 1024);
+                    if (url.pathname === '/private-api/translations/analyze')
+                        return json(res, 202, await startAiAction(() => translations.start(input, req)));
+                    if (url.pathname === '/private-api/translations/translate')
+                        return json(res, 202, await startAiAction(() => translations.resume(input, req)));
+                    if (url.pathname === '/private-api/translations/edit')
+                        return json(res, 202, await translations.edit(input));
+                    if (url.pathname === '/private-api/translations/cancel')
+                        return json(res, 200, await translations.cancel(input.id));
+                    return json(res, 404, { error: 'Unbekannte Übersetzungsaktion.' });
+                }
                 if (url.pathname.startsWith('/private-api/ai/')) {
                     if (req.method === 'GET' && url.pathname === '/private-api/ai/settings')
                         return json(res, 200, await ai.status());
@@ -206,9 +281,21 @@ export function createGateway({
                             error: 'Diese Aktion muss von derselben Suwayomi-Seite gestartet werden.',
                         });
                     const input = await body(req);
-                    if (url.pathname === '/private-api/ai/settings') return json(res, 200, await ai.save(input));
+                    if (url.pathname === '/private-api/ai/settings') {
+                        assert(
+                            !translations.busy(),
+                            'Bitte die Kapitelverarbeitung vor einer Schlüsseländerung abwarten.',
+                        );
+                        return json(res, 200, await ai.save(input));
+                    }
                     if (url.pathname === '/private-api/ai/test') return json(res, 200, await ai.testConnection());
-                    if (url.pathname === '/private-api/ai/search') return json(res, 202, await ai.start(input, req));
+                    if (url.pathname === '/private-api/ai/search') {
+                        assert(
+                            !translations.busy(),
+                            'Bitte die Kapitelverarbeitung vor einer weiteren KI-Suche abwarten.',
+                        );
+                        return json(res, 202, await startAiAction(() => ai.start(input, req)));
+                    }
                     if (url.pathname === '/private-api/ai/balance') return json(res, 200, await ai.setBalance(input));
                     if (url.pathname === '/private-api/ai/billing') return json(res, 200, await ai.saveBilling(input));
                     if (url.pathname === '/private-api/ai/costs') return json(res, 200, await ai.syncCosts(input.days));
@@ -260,6 +347,10 @@ export function createGateway({
                     });
                 }
                 if (url.pathname === '/private-api/update' || url.pathname === '/private-api/rollback') {
+                    assert(
+                        !translations.busy(),
+                        'Bitte die laufende Kapitelübersetzung zuerst abwarten oder abbrechen.',
+                    );
                     const action = url.pathname.endsWith('/rollback') ? 'rollback' : 'update';
                     if (action === 'update') assert(sha(input.commit), 'Vollständige Commit-Kennung erforderlich.');
                     const job = await createJob(config, api, action, input.commit, user.serverRevision);
@@ -326,7 +417,14 @@ export function createGateway({
             else res.destroy();
         }
     });
-    server.on('close', () => ai.stop());
+    let closing;
+    server.shutdownPrivate = () => {
+        closing ||= translations.stop().finally(() => ai.stop());
+        return closing;
+    };
+    server.on('close', () => {
+        void server.shutdownPrivate();
+    });
     server.on('upgrade', (req, socket, head) => {
         if (!req.url.startsWith('/api/')) {
             socket.destroy();
@@ -366,7 +464,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     gateway.listen(18081, '192.168.175.60', () => console.log('Suwayomi-Private ' + manifest.version + ' bereit.'));
     for (const signal of ['SIGTERM', 'SIGINT'])
         process.on(signal, () => {
-            gateway.close(() => process.exit(0));
-            setTimeout(() => process.exit(0), 10000).unref();
+            gateway.close();
+            void gateway.shutdownPrivate().finally(() => process.exit(0));
+            setTimeout(() => process.exit(0), 15000).unref();
         });
 }
