@@ -275,6 +275,23 @@ function untilAbort(signal) {
         else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
     });
 }
+test('A request without reliable manga recommendations does not claim to have checked source listings', async (t) => {
+    const f = await fixture(t, {
+        model: async () =>
+            modelResult({
+                ...plan,
+                recommendations: [],
+                notice: 'Keine verlässlichen Manga-Vorschläge für diese Anfrage.',
+            }),
+    });
+    const job = await f.service.start(input, request);
+    const result = await finished(f.service, job.id);
+    assert.equal(result.phase, 'completed');
+    assert.equal(result.checkedQueries, 0);
+    assert.equal(result.completedSources, 0);
+    assert(result.sources.every((source) => source.phase === 'interrupted'));
+    assert(result.notice);
+});
 test(
     'Simultaneous starts cannot double-charge; job results belong to their authenticated caller and cancellation releases the search',
     { timeout: 4000 },

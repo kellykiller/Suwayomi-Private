@@ -349,6 +349,10 @@ export function createAiService({
             job.cached = result.cached;
             job.usage = result.usage;
             job.recommendations = result.plan.recommendations.map((item) => ({ ...item, matches: [] }));
+            if (!job.recommendations.length) {
+                job.phase = 'completed';
+                return;
+            }
             job.phase = 'searching';
             let cursor = 0;
             async function scan() {
