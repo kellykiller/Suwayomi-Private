@@ -1,0 +1,332 @@
+/* SPDX-License-Identifier: MPL-2.0 */
+import http from 'node:http';
+import { createReadStream } from 'node:fs';
+import * as fs from 'node:fs/promises';
+import { resolve, extname, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
+import {
+    BASE,
+    REPOSITORY,
+    UI_CONTAINER,
+    UI_SERVICE,
+    UPSTREAM,
+    assert,
+    sha,
+    exists,
+    readJson,
+    writeJson,
+    loadConfig,
+    secrets,
+    portainerClient,
+    resolveCommit,
+    projectManifest,
+    stackState,
+    inspect,
+} from './common.mjs';
+import { activeJob, createJob, jobIdValid } from './worker.mjs';
+
+const hop = new Set([
+    'connection',
+    'keep-alive',
+    'proxy-authenticate',
+    'proxy-authorization',
+    'te',
+    'trailer',
+    'transfer-encoding',
+    'upgrade',
+]);
+function proxyHeaders(headers, upstream) {
+    const excluded = new Set([
+        ...hop,
+        ...String(headers.connection || '')
+            .split(',')
+            .map((value) => value.trim().toLowerCase()),
+    ]);
+    return {
+        ...Object.fromEntries(Object.entries(headers).filter(([key]) => !excluded.has(key))),
+        host: upstream.host,
+    };
+}
+const types = {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'application/javascript',
+    '.css': 'text/css',
+    '.json': 'application/json',
+    '.png': 'image/png',
+    '.ico': 'image/x-icon',
+    '.svg': 'image/svg+xml',
+    '.webmanifest': 'application/manifest+json',
+    '.woff2': 'font/woff2',
+    '.txt': 'text/plain; charset=utf-8',
+};
+function json(res, status, value) {
+    res.writeHead(status, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+    });
+    res.end(JSON.stringify(value));
+}
+async function body(req) {
+    assert((req.headers['content-type'] || '').startsWith('application/json'), 'JSON erforderlich.');
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of req) {
+        size += chunk.length;
+        assert(size <= 8192, 'Anfrage ist zu groß.');
+        chunks.push(chunk);
+    }
+    const value = JSON.parse(Buffer.concat(chunks).toString());
+    assert(value && typeof value === 'object' && !Array.isArray(value), 'Ungültige Anfrage.');
+    return value;
+}
+export function sameOrigin(req, origins) {
+    return (
+        origins.includes(req.headers.origin) &&
+        req.headers['x-suwayomi-private'] === '1' &&
+        (!req.headers['sec-fetch-site'] || ['same-origin', 'none'].includes(req.headers['sec-fetch-site']))
+    );
+}
+export async function authenticate(req, upstream, fetchImpl = fetch) {
+    const headers = {
+        'Content-Type': 'application/json',
+        ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {}),
+        ...(req.headers.cookie ? { Cookie: req.headers.cookie } : {}),
+    };
+    const response = await fetchImpl(new URL('/api/graphql', upstream), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ query: 'query { settings { authMode } aboutServer { version } }' }),
+        redirect: 'manual',
+        signal: AbortSignal.timeout(10000),
+    });
+    if (response.status === 401)
+        return { authorized: false, challenge: response.headers.get('www-authenticate') || 'Basic realm="Suwayomi"' };
+    if (!response.ok) throw new Error('Suwayomi-Anmeldung konnte nicht geprüft werden.');
+    const value = await response.json();
+    if (value.errors || !value.data?.settings?.authMode)
+        return { authorized: false, challenge: 'Basic realm="Suwayomi"' };
+    const mode = value.data.settings.authMode;
+    const match = value.data.aboutServer?.version?.match(/(?:^|v)(\d+)\.(\d+)\.(\d+)/);
+    return {
+        authorized: true,
+        mode,
+        serverRevision: match ? Number(match[3]) : null,
+        canManage: mode === 'BASIC_AUTH' && /^Basic\s+/i.test(req.headers.authorization || ''),
+    };
+}
+export function createGateway({
+    upstream = UPSTREAM,
+    webRoot = resolve('build'),
+    manifest,
+    configLoader = loadConfig,
+    fetchImpl = fetch,
+    secretLoader = secrets,
+    jobReader = activeJob,
+    stateExists = exists,
+    stateRead = readJson,
+} = {}) {
+    const target = new URL(upstream);
+    assert(
+        target.protocol === 'http:' && !target.username && !target.password && target.pathname === '/',
+        'Ungültiges internes Suwayomi-Ziel.',
+    );
+    const server = http.createServer(async (req, res) => {
+        try {
+            assert(
+                req.url?.startsWith('/') && !req.url.startsWith('//') && !req.url.includes('\\'),
+                'Ungültige Adresse.',
+            );
+            const url = new URL(req.url, 'http://private.local');
+            if (url.pathname === '/healthz' && req.method === 'GET') {
+                let response;
+                try {
+                    response = await fetchImpl(target, { redirect: 'manual', signal: AbortSignal.timeout(5000) });
+                } catch {}
+                const ready = !!response && [200, 301, 302, 303, 307, 308, 401].includes(response.status);
+                return json(res, ready ? 200 : 503, { ready, commit: manifest.commit, version: manifest.version });
+            }
+            if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
+                const outgoing = http.request(
+                    new URL(req.url, target),
+                    { method: req.method, headers: proxyHeaders(req.headers, target) },
+                    (incoming) => {
+                        res.writeHead(
+                            incoming.statusCode,
+                            Object.fromEntries(Object.entries(incoming.headers).filter(([key]) => !hop.has(key))),
+                        );
+                        incoming.pipe(res);
+                    },
+                );
+                outgoing.on('error', () => {
+                    if (!res.headersSent) json(res, 502, { error: 'Suwayomi ist nicht erreichbar.' });
+                    else res.destroy();
+                });
+                req.on('aborted', () => outgoing.destroy());
+                req.pipe(outgoing);
+                return;
+            }
+            const user = await authenticate(req, target, fetchImpl);
+            if (!user.authorized) {
+                res.writeHead(401, { 'WWW-Authenticate': user.challenge, 'Cache-Control': 'no-store' });
+                res.end('Anmeldung bei Suwayomi erforderlich.');
+                return;
+            }
+            if (url.pathname.startsWith('/private-api/')) {
+                if (!user.canManage)
+                    return json(res, 403, {
+                        error: 'Die private Updateverwaltung benötigt die bestehende Suwayomi-Basic-Auth-Anmeldung.',
+                    });
+                const config = await configLoader();
+                const keys = await secretLoader();
+                const api = portainerClient(config.portainerUrl, keys.portainer, fetchImpl);
+                if (req.method === 'GET' && url.pathname === '/private-api/status') {
+                    const running = await jobReader();
+                    let last = null;
+                    if (!running && (await stateExists('/update/latest-job.json'))) {
+                        const latest = await stateRead('/update/latest-job.json');
+                        if (jobIdValid(latest.id)) last = await stateRead('/update/jobs/' + latest.id + '.json');
+                    }
+                    const rollback = (await stateExists('/update/last-success.json'))
+                        ? await stateRead('/update/last-success.json')
+                        : null;
+                    return json(res, 200, {
+                        manifest,
+                        repository: REPOSITORY,
+                        serverRevision: user.serverRevision,
+                        configured: { github: !!keys.github, portainer: !!keys.portainer },
+                        job: running || last,
+                        busy: !!running,
+                        canRollback: !!rollback?.previousPrivateVersion,
+                    });
+                }
+                if (req.method !== 'POST') return json(res, 404, { error: 'Unbekannte Aktion.' });
+                if (!sameOrigin(req, config.origins))
+                    return json(res, 403, {
+                        error: 'Diese Aktion muss von derselben Suwayomi-Seite gestartet werden.',
+                    });
+                const input = await body(req);
+                if (url.pathname === '/private-api/check') {
+                    const latest = await resolveCommit(keys.github, 'main', fetchImpl);
+                    const metadata = await projectManifest(keys.github, latest.sha, fetchImpl);
+                    return json(res, 200, {
+                        latest,
+                        version: metadata.version,
+                        minimumServerRevision: metadata.minimumServerRevision,
+                        compatible:
+                            Number.isInteger(user.serverRevision) &&
+                            user.serverRevision >= metadata.minimumServerRevision,
+                        hasUpdate: latest.sha !== manifest.commit,
+                    });
+                }
+                if (url.pathname === '/private-api/update' || url.pathname === '/private-api/rollback') {
+                    const action = url.pathname.endsWith('/rollback') ? 'rollback' : 'update';
+                    if (action === 'update') assert(sha(input.commit), 'Vollständige Commit-Kennung erforderlich.');
+                    const job = await createJob(config, api, action, input.commit, user.serverRevision);
+                    return json(res, 202, { id: job.id });
+                }
+                if (url.pathname === '/private-api/credentials') {
+                    assert(!(await jobReader()), 'API-Schlüssel können während eines Updates nicht geändert werden.');
+                    const changes = Object.entries(input).filter(
+                        ([name, value]) => ['github', 'portainer'].includes(name) && value !== '',
+                    );
+                    assert(
+                        changes.length && Object.keys(input).every((name) => ['github', 'portainer'].includes(name)),
+                        'Keine gültigen API-Schlüssel übergeben.',
+                    );
+                    for (const [name, value] of changes) {
+                        assert(
+                            typeof value === 'string' && value.length >= 20 && value.length <= 512 && !/\s/.test(value),
+                            'Ungültiger API-Schlüssel.',
+                        );
+                        if (name === 'github') await resolveCommit(value, 'main', fetchImpl);
+                        else await stackState(portainerClient(config.portainerUrl, value, fetchImpl), config);
+                    }
+                    for (const [name, value] of changes) {
+                        const path = '/secrets/' + name + '.token',
+                            temporary = path + '.' + randomUUID();
+                        await fs.writeFile(temporary, value + '\n', { mode: 0o600, flag: 'wx' });
+                        await fs.rename(temporary, path);
+                    }
+                    return json(res, 200, { saved: true });
+                }
+                return json(res, 404, { error: 'Unbekannte Aktion.' });
+            }
+            if (!['GET', 'HEAD'].includes(req.method)) return json(res, 405, { error: 'Methode nicht erlaubt.' });
+            let pathname;
+            try {
+                pathname = decodeURIComponent(url.pathname);
+            } catch {
+                return json(res, 400, { error: 'Ungültige Adresse.' });
+            }
+            let path = resolve(webRoot, '.' + pathname);
+            assert(path === webRoot || path.startsWith(webRoot + sep), 'Ungültiger Dateipfad.');
+            let info = await fs.stat(path).catch(() => null);
+            if (!info?.isFile()) {
+                if (extname(pathname)) return json(res, 404, { error: 'Datei nicht gefunden.' });
+                path = resolve(webRoot, 'index.html');
+                info = await fs.stat(path);
+            }
+            res.writeHead(200, {
+                'Content-Type': types[extname(path)] || 'application/octet-stream',
+                'Content-Length': info.size,
+                'Cache-Control':
+                    extname(path) === '.html' || ['sw.js', 'registerSW.js'].some((name) => path.endsWith(sep + name))
+                        ? 'no-store'
+                        : 'private, max-age=3600',
+                'X-Content-Type-Options': 'nosniff',
+            });
+            if (req.method === 'HEAD') res.end();
+            else
+                createReadStream(path)
+                    .on('error', () => res.destroy())
+                    .pipe(res);
+        } catch (error) {
+            if (!res.headersSent) json(res, 400, { error: error.message });
+            else res.destroy();
+        }
+    });
+    server.on('upgrade', (req, socket, head) => {
+        if (!req.url.startsWith('/api/')) {
+            socket.destroy();
+            return;
+        }
+        const outgoing = http.request(new URL(req.url, target), { headers: { ...req.headers, host: target.host } });
+        outgoing.on('upgrade', (incoming, backend, buffer) => {
+            socket.write(
+                'HTTP/1.1 101 Switching Protocols\r\n' +
+                    Object.entries(incoming.headers)
+                        .map(([key, value]) => key + ': ' + value)
+                        .join('\r\n') +
+                    '\r\n\r\n',
+            );
+            if (head.length) backend.write(head);
+            if (buffer.length) socket.write(buffer);
+            backend.on('error', () => socket.destroy());
+            socket.on('error', () => backend.destroy());
+            socket.on('close', () => backend.destroy());
+            backend.on('close', () => socket.destroy());
+            socket.pipe(backend).pipe(socket);
+        });
+        outgoing.on('response', (response) => {
+            socket.write(
+                'HTTP/1.1 ' + response.statusCode + ' ' + response.statusMessage + '\r\nConnection: close\r\n\r\n',
+            );
+            socket.destroy();
+        });
+        outgoing.on('error', () => socket.destroy());
+        outgoing.end();
+    });
+    return server;
+}
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    const manifest = await readJson('private/manifest.json');
+    const gateway = createGateway({ upstream: process.env.SUWAYOMI_UPSTREAM || UPSTREAM, manifest });
+    gateway.listen(18081, '192.168.175.60', () => console.log('Suwayomi-Private ' + manifest.version + ' bereit.'));
+    for (const signal of ['SIGTERM', 'SIGINT'])
+        process.on(signal, () => {
+            gateway.close(() => process.exit(0));
+            setTimeout(() => process.exit(0), 10000).unref();
+        });
+}

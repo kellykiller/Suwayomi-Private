@@ -50,6 +50,10 @@ export const AppRoutes = {
         match: 'settings',
         path: '/settings',
         children: {
+            privateUpdates: {
+                match: 'private-updates',
+                path: '/settings/private-updates',
+            },
             categories: {
                 match: 'categories',
                 path: '/settings/categories',

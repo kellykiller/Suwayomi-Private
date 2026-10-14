@@ -4603,3 +4603,103 @@ msgstr ""
 "Das vorherige Kapitel hat einen anderen Scanlator als das Aktuelle.\n"
 "Vorheriges: {nextScanlator}\n"
 "Aktuell: {currentScanlator}"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Private updates"
+msgstr "Private Updates"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Waiting"
+msgstr "Wartet"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Checking version"
+msgstr "Version wird geprüft"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Downloading project"
+msgstr "Projekt wird heruntergeladen"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Building update"
+msgstr "Update wird gebaut"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Installing and checking startup"
+msgstr "Installation und Startprüfung"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Failed"
+msgstr "Fehlgeschlagen"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Installed version"
+msgstr "Installierte Version"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Based on Suwayomi WebUI"
+msgstr "Grundlage: Suwayomi-WebUI"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Install update"
+msgstr "Update installieren"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Restore previous version"
+msgstr "Vorherige Version wiederherstellen"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Changes are available"
+msgstr "Änderungen sind verfügbar"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "This version is up to date"
+msgstr "Diese Version ist aktuell"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "A newer Suwayomi server is required before installing this update"
+msgstr "Dieses Update benötigt einen neueren Suwayomi-Server"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "The update continues if you close this page. The connection may briefly drop during installation."
+msgstr "Das Update läuft weiter, wenn du diese Seite schließt. Während der Installation kann die Verbindung kurz unterbrochen werden."
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Reload page"
+msgstr "Seite neu laden"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Build log"
+msgstr "Build-Protokoll"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "API keys"
+msgstr "API-Schlüssel"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Saved keys are never displayed. Leave a field empty to keep its current key."
+msgstr "Gespeicherte Schlüssel werden nicht angezeigt. Ein leeres Feld behält den bisherigen Schlüssel bei."
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "GitHub read token"
+msgstr "GitHub-Lesetoken"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Portainer API key"
+msgstr "Portainer-API-Schlüssel"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Saved"
+msgstr "Gespeichert"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Not configured"
+msgstr "Nicht eingerichtet"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Save API keys"
+msgstr "API-Schlüssel speichern"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "API keys saved"
+msgstr "API-Schlüssel gespeichert"

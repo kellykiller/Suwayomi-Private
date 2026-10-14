@@ -1,0 +1,9 @@
+.git
+node_modules
+build
+buildZip
+.env
+.env.local
+*.token
+data
+secrets

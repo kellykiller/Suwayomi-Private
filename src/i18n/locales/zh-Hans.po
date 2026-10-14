@@ -4500,3 +4500,103 @@ msgstr ""
 "上一章的汉化组与当前章节不同。\n"
 "上一章: {nextScanlator}\n"
 "当前: {currentScanlator}"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Private updates"
+msgstr "Private updates"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Waiting"
+msgstr "Waiting"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Checking version"
+msgstr "Checking version"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Downloading project"
+msgstr "Downloading project"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Building update"
+msgstr "Building update"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Installing and checking startup"
+msgstr "Installing and checking startup"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Failed"
+msgstr "Failed"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Installed version"
+msgstr "Installed version"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Based on Suwayomi WebUI"
+msgstr "Based on Suwayomi WebUI"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Install update"
+msgstr "Install update"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Restore previous version"
+msgstr "Restore previous version"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Changes are available"
+msgstr "Changes are available"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "This version is up to date"
+msgstr "This version is up to date"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "A newer Suwayomi server is required before installing this update"
+msgstr "A newer Suwayomi server is required before installing this update"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "The update continues if you close this page. The connection may briefly drop during installation."
+msgstr "The update continues if you close this page. The connection may briefly drop during installation."
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Reload page"
+msgstr "Reload page"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Build log"
+msgstr "Build log"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "API keys"
+msgstr "API keys"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Saved keys are never displayed. Leave a field empty to keep its current key."
+msgstr "Saved keys are never displayed. Leave a field empty to keep its current key."
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "GitHub read token"
+msgstr "GitHub read token"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Portainer API key"
+msgstr "Portainer API key"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Saved"
+msgstr "Saved"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Not configured"
+msgstr "Not configured"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "Save API keys"
+msgstr "Save API keys"
+
+#: src/features/private-updates/PrivateUpdates.tsx
+msgid "API keys saved"
+msgstr "API keys saved"

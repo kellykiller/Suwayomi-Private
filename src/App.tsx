@@ -17,7 +17,6 @@ import { AwaitableComponent } from 'awaitable-component';
 import { AppContext } from '@/base/contexts/AppContext.tsx';
 import { DefaultNavBar } from '@/features/navigation-bar/components/DefaultNavBar.tsx';
 import { requestManager } from '@/lib/requests/RequestManager.ts';
-import { WebUIUpdateChecker } from '@/features/app-updates/components/WebUIUpdateChecker.tsx';
 import { ServerUpdateChecker } from '@/features/app-updates/components/ServerUpdateChecker.tsx';
 import { lazyLoadFallback } from '@/base/utils/LazyLoad.tsx';
 import { ErrorBoundary } from '@/base/components/feedback/ErrorBoundary.tsx';
@@ -79,6 +78,7 @@ const { ImageProcessingSetting } = loadable(
 const { ServerSettings } = loadable(() => import('@/features/settings/screens/ServerSettings.tsx'), lazyLoadFallback);
 const { BrowseSettings } = loadable(() => import('@/features/browse/screens/BrowseSettings.tsx'), lazyLoadFallback);
 const { WebUISettings } = loadable(() => import('@/features/settings/screens/WebUISettings.tsx'), lazyLoadFallback);
+const { PrivateUpdates } = loadable(() => import('@/features/private-updates/PrivateUpdates.tsx'), lazyLoadFallback);
 const { Migration } = loadable(() => import('@/features/migration/screens/Migration.tsx'), lazyLoadFallback);
 const { DeviceSetting } = loadable(() => import('@/features/device/screens/DeviceSetting.tsx'), lazyLoadFallback);
 const { TrackingSettings } = loadable(
@@ -329,6 +329,10 @@ const MainApp = () => {
                             <Route path={AppRoutes.settings.children.backup.match} element={<Backup />} />
                             <Route path={AppRoutes.settings.children.server.match} element={<ServerSettings />} />
                             <Route path={AppRoutes.settings.children.webui.match} element={<WebUISettings />} />
+                            <Route
+                                path={AppRoutes.settings.children.privateUpdates.match}
+                                element={<PrivateUpdates />}
+                            />
                             <Route path={AppRoutes.settings.children.browse.match}>
                                 <Route index element={<BrowseSettings />} />
                                 <Route
@@ -413,7 +417,6 @@ export const App: React.FC = () => (
         <AuthGuard>
             <InitializeGuard>
                 <ServerUpdateChecker />
-                <WebUIUpdateChecker />
                 <InitialBackgroundRequests />
                 <BackgroundSubscriptions />
                 <ResumeMigration />

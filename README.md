@@ -1,86 +1,60 @@
-# Suwayomi-WebUI
+# Suwayomi-Private
 
-This is the repository of the default client of [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server).
+Private Anpassung der **vollständigen Suwayomi-WebUI** für das NAS HLP2-NAS01-P. Bibliothek, Suche, Quellen, Kapitelverwaltung, Downloads und Reader bleiben Bestandteil der nativen Oberfläche. Als Basis dient Suwayomi-WebUI `v20260929.01` (Commit `41443eaba44bcbdf45d666fe27471b50d41fd994`, mindestens Server-Revision r2320). Die ursprünglichen Lizenz- und Copyright-Angaben sind erhalten.
 
-The server has this web app bundled by default and is able to automatically update to the latest versions.
-Thus, there is no need to manually download any builds unless you want to host the app yourself instead of having it hosted by the Suwayomi-Server.
+## Aktueller Stand
 
-## Features
+In **Einstellungen → Private Updates** lassen sich neue Projektstände prüfen, installieren und auf den vorherigen erfolgreichen privaten Stand zurücksetzen. GitHub- und Portainer-Schlüssel können dort geprüft und ausgetauscht werden. Leere Eingaben behalten den bisherigen Schlüssel; gespeicherte Schlüssel werden nie an den Browser zurückgegeben.
 
-- Library management
-    - Library page - manga management
-        - Filter/Sort/Search your manga
-        - Use categories to categorize your manga
-        - Select manga in your library and perform actions (e.g. download, change categories, mark as read, ...) on one or multiple manga
-    - Manga page - chapter management
-        - Filter/Sort the chapter list
-        - Select chapters and perform actions (e.g. download, bookmark, mark as read, ...) on one or multiple manga
-    - Select a range of manga/chapters by using shift + left click or long press
-    - Overview of duplicated manga in your library (settings > library)
-- Reader
-    - Desktop and Mobile UI
-    - Default settings per reading mode
-    - Settings per manga
-    - Reading modes (Single/Double Page, Continuous Vertical/Horizontal, Webtoon)
-    - Page scale modes (limit by width/height/screen, scale small pages, custom reader width)
-    - Image filters
-    - Customizable keybinds
-    - Auto scrolling
-    - Infinite chapter scrolling
-    - Option to ignore duplicated chapters while reading
-    - Option to automatically download next chapters while reading
-    - Option to automatically delete downloaded chapters after reading them
-    - ...
-- Download queue
-- Reading history (**rudimentary**)
-- Settings per device (e.g. different reader settings for pc, phone and tablet)
-- Sources
-    - Migration of manga between sources
-    - Hide in library manga while browsing sources
-    - Save source searches to easily reuse them
-    - Duplication check when adding a new manga to your library
-    - Quick add/remove a manga to your library in the source browse (hover with mouse on pc or long press on touch devices)
-- App updates
-    - Inform about available WebUI and Server updates
-    - Inform about successful WebUI and Server updates since the last time the app was used
-- Themes
-    - Use predefined themes
-    - Create your own themes
-    - Dynamic theme on manga pages
+Die Updatefunktion aktualisiert die private Oberfläche und ihren Dienst aus `kellykiller/Suwayomi-Private/main`. Das vorhandene Suwayomi-Server-Image bleibt erhalten. Automatische Übernahmen neuer Upstream-Versionen erfolgen nicht; Änderungen am Server oder an der Upstream-Basis werden separat geprüft. Die Verwaltung setzt die bestehende Suwayomi-Basic-Auth-Anmeldung voraus.
 
-## Preview
+KI-Suche und Kapitelübersetzung sind noch nicht implementiert. Vorgesehen sind natürliche Suchanfragen sowie Übersetzungen aus heruntergeladenen Kapiteln mit Bild- und Kapitelkontext. Originaldateien sollen unverändert erhalten bleiben; übersetzte Seiten werden separat erzeugt.
 
-An ongoing changelog of all relevant changes since the last stable release can be found [here](https://github.com/Suwayomi/Suwayomi-WebUI/blob/master/CHANGELOG.md)
+## NAS-Einrichtung
 
-To use the preview version you can select the PREVIEW channel in the settings of your Suwayomi-Server.
-The server is then able to download and also keep the version automatically up-to-date.
+Voraussetzung ist die abgeschlossene MangaFusion-Migration:
 
-Keep in mind that the preview version might need a newer version than the stable server.
-In case your server is outdated, it will automatically downgrade to the latest compatible WebUI version.
+- Daten: `/volume3/docker/suwayomi/data`
+- Schlüssel: `/volume3/docker/suwayomi/secrets/github.token` und `portainer.token`
+- Verbindung: `/volume3/docker/suwayomi/updater/connection.json`
+- Portainer-Stack und Backend-Container: `suwayomi`
 
-Minified builds of WebUI can be found here [Suwayomi-WebUI-preview](https://github.com/Suwayomi/Suwayomi-WebUI-preview).
+Der GitHub-Token muss Zugriff auf dieses neue private Repository haben: **Contents: Read** und die automatisch enthaltenen Metadatenrechte genügen. Ein Fine-grained Token, der ausschließlich das gelöschte MangaFusion-Repository auswählt, muss entsprechend angepasst werden. Der Portainer-Token muss den vorhandenen Stack und den lokalen Docker-Endpunkt verwalten können.
 
-Additionally, there is an online build of the WebUI preview version that is available [here](https://suwayomi-webui-preview.github.io/).
-_Make sure to set your Suwayomi-Server hostname in Settings or you'll get infinite loading._ Also note that its the **latest** revision of WebUI and might not work correctly if you connect to a stable build of Suwayomi-Server.
+`deploy/nas-install.sh` wird einmalig als root mit einer vollständigen, geprüften Commit-SHA ausgeführt. Es erstellt das Image, prüft den vorhandenen Backend-Container und richtet die vollständige private Oberfläche ein. Während des Builds läuft der Reader weiter; beim abschließenden Wechsel wird Suwayomi kurz sauber gestoppt. Der bestehende DSM-Reverse-Proxy bleibt bei **HTTP 192.168.175.60:18081**.
 
-## Contributing and Technical info
+| Zugang                                 | Zweck                                                         |
+| -------------------------------------- | ------------------------------------------------------------- |
+| `https://hlp2-nas01-p.chickenfight.de` | Vollständige private Suwayomi-Oberfläche                      |
+| `http://192.168.175.60:18081`          | Derselbe Dienst direkt im LAN                                 |
+| `http://192.168.175.60:18082`          | Originaloberfläche des vorhandenen Servers als Rückfallzugang |
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md).
+Der zusätzliche Container `suwayomi-private-ui` nutzt Host-Netzwerk, damit er das ausschließlich lokal erreichbare Portainer ansprechen kann; er lauscht nur auf der NAS-IP, Port 18081. API und WebSockets werden an den vorhandenen Server auf Port 18082 weitergeleitet. Anmeldung und Daten bleiben beim Server. Diese Installation ist bewusst auf die bestätigte NAS-Konfiguration zugeschnitten.
 
-## Translation
+Die Einrichtung prüft Image, Benutzer, Datenmount, Zugangskonfiguration, Stack und Docker-Kennung. Bei einem fehlgeschlagenen Wechsel versucht sie, die ursprüngliche Stack-Konfiguration wiederherzustellen. Snapshots liegen geschützt unter `updater/backups`; sie können Zugangsdaten enthalten und gehören nicht ins Repository. Ein tatsächlicher NAS-Lauf ist zur abschließenden Überprüfung erforderlich.
 
-Feel free to translate the project on [Weblate](https://hosted.weblate.org/projects/suwayomi/suwayomi-webui/)
+## Updates und Wiederherstellung
 
-<details><summary>Translation Progress</summary>
-<a href="https://hosted.weblate.org/engage/suwayomi-webui/">
-<img src="https://hosted.weblate.org/widgets/suwayomi/-/suwayomi-webui/multi-auto.svg" alt="Translation status" />
-</a>
-</details>
+Ein Update lädt einen festen Commit aus GitHub und baut ihn lokal über die Portainer-Docker-API. Ein separater Hilfscontainer führt den Auftrag weiter, während die Oberfläche ausgetauscht wird. Gleichzeitige Aufträge sind gesperrt; zwischenzeitliche manuelle Stack-Änderungen werden nicht überschrieben. Bei fehlgeschlagenem Start wird auf das vorherige Image zurückgesetzt. Alte private Images nicht löschen, solange sie als Rücksetzstand gebraucht werden.
 
-## License
+Rücksetzen steht nach dem ersten erfolgreichen Update zur Verfügung. Der erstmalige Installationssnapshot wird separat aufbewahrt. Wenn ein Auftrag nach einem NAS-Neustart hängen bleibt, zunächst den zugehörigen Hilfscontainer `suwayomi-private-update-<Auftrags-ID>` und die Dateien unter `updater/jobs` prüfen. Eine Sperre erst nach Bestätigung entfernen, dass kein Auftrag mehr läuft. Der Rückfallzugang auf Port 18082 bleibt verfügbar.
 
-    Copyright (C) Contributors to the Suwayomi project
+GitHub, codeload.github.com, Docker Hub und die npm-Registry müssen vom NAS aus mit korrektem TLS erreichbar sein. Eine API-Schlüsseländerung ersetzt keine Netzwerkkonfiguration. TLS-Prüfung nicht deaktivieren.
 
-    This Source Code Form is subject to the terms of the Mozilla Public
-    License, v. 2.0. If a copy of the MPL was not distributed with this
-    file, You can obtain one at http://mozilla.org/MPL/2.0/.
+## Entwicklung
+
+Node >=24.20.0 und pnpm 11.1.2:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm tsc
+pnpm lint
+pnpm format:check
+pnpm test
+pnpm setup-env-files
+pnpm exec vite build
+```
+
+Die Tests prüfen unter anderem native API-/WebSocket-Weiterleitung, Anmeldung, Zugriffsschutz, Schlüsselabschirmung, Archivvalidierung, Auftragsperren, Docker-Buildfehler und Rücksetzen bei unverändertem Stack. Der CI-Workflow prüft zusätzlich den Docker-Build. CI veröffentlicht keine Pakete oder Images.
+
+Die Originalquellen der verwendeten Upstream-Version liegen im Branch `upstream/v20260929.01`; eigene Änderungen werden auf `main` weiterentwickelt. Weitere Upstream-Hinweise: [Suwayomi-WebUI](https://github.com/Suwayomi/Suwayomi-WebUI), [MPL-2.0](LICENSE).
