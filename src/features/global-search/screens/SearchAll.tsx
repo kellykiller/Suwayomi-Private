@@ -64,6 +64,7 @@ import groupBy from 'lodash/fp/groupBy';
 import mapValues from 'lodash/fp/mapValues';
 import type { TMigratableSource } from '@/features/migration/Migration.types.ts';
 import { plural } from '@lingui/core/macro';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 
 type SourceLoadingState = { isLoading: boolean; hasResults: boolean; emptySearch: boolean; error: any };
 type SourceToLoadingStateMap = Map<string, SourceLoadingState>;
@@ -349,6 +350,17 @@ export const SearchAll = ({
     useAppTitleAndAction(
         title,
         <>
+            {!isMigrateMode && (
+                <CustomTooltip title={t`AI search`}>
+                    <IconButton
+                        component={Link}
+                        to={AppRoutes.sources.children.aiSearch.path}
+                        aria-label={t`AI search`}
+                    >
+                        <AutoAwesomeIcon />
+                    </IconButton>
+                </CustomTooltip>
+            )}
             <AppbarSearch searchHistoryKey="globalSearch" isClosable={false} />
             <SourceLanguageSelect
                 selectedLanguages={shownLangs}

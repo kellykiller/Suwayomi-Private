@@ -167,3 +167,243 @@ msgstr "Check for updates"
 #: src/features/private-updates/PrivateUpdates.tsx
 msgid "Retry"
 msgstr "Retry"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "A key is saved on the NAS. Leave this field empty to keep it."
+msgstr "A key is saved on the NAS. Leave this field empty to keep it."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "AI answer reused from cache"
+msgstr "AI answer reused from cache"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "AI model"
+msgstr "AI model"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "AI search"
+msgstr "AI search"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "AI settings"
+msgstr "AI settings"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "AI settings saved"
+msgstr "AI settings saved"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "All source languages"
+msgstr "All source languages"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Cancel search"
+msgstr "Cancel search"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Checked"
+msgstr "Checked"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Clear results"
+msgstr "Clear results"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Configure and enable AI search in the settings first."
+msgstr "Configure and enable AI search in the settings first."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Connection successful"
+msgstr "Connection successful"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Connection testing checks model access without generating a paid AI response. It does not check your remaining API credit."
+msgstr "Connection testing checks model access without generating a paid AI response. It does not check your remaining API credit."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Considerations"
+msgstr "Considerations"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Describe what you want to read. AI suggests titles and Suwayomi looks for them across your selected installed sources."
+msgstr "Describe what you want to read. AI suggests titles and Suwayomi looks for them across your selected installed sources."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Disabled sources and your adult-content preference are respected. Pinning does not limit AI search. Up to 100 sources can be checked per search."
+msgstr "Disabled sources and your adult-content preference are respected. Pinning does not limit AI search. Up to 100 sources can be checked per search."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Enable AI search"
+msgstr "Enable AI search"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Find manga like One Piece, but with more fights."
+msgstr "Find manga like One Piece, but with more fights."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Find recommendations"
+msgstr "Find recommendations"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "In library"
+msgstr "In library"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Input tokens"
+msgstr "Input tokens"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Low"
+msgstr "Low"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Low is the starting point for faster searches. Medium may improve difficult requests and uses more tokens."
+msgstr "Low is the starting point for faster searches. Medium may improve difficult requests and uses more tokens."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Maximum recommendations"
+msgstr "Maximum recommendations"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Medium"
+msgstr "Medium"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "More result pages remain unchecked"
+msgstr "More result pages remain unchecked"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "No OpenAI key is configured yet."
+msgstr "No OpenAI key is configured yet."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "No matching listing found in the checked sources"
+msgstr "No matching listing found in the checked sources"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "No matching listing found yet"
+msgstr "No matching listing found yet"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "No recommendations to display. Try adjusting your request or sources."
+msgstr "No recommendations to display. Try adjusting your request or sources."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Not fully checked"
+msgstr "Not fully checked"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "One AI request per new search. Identical requests reuse the AI answer for 24 hours; source availability is checked again."
+msgstr "One AI request per new search. Identical requests reuse the AI answer for 24 hours; source availability is checked again."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Only show titles found in sources"
+msgstr "Only show titles found in sources"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Open AI search"
+msgstr "Open AI search"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "OpenAI API key"
+msgstr "OpenAI API key"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "OpenAI key removed"
+msgstr "OpenAI key removed"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Output tokens"
+msgstr "Output tokens"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Reasoning effort"
+msgstr "Reasoning effort"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Recommendation reasons are AI assessments. A source match confirms a title listing, not chapter completeness or the claimed story development. Missing matches may be caused by title variants, source errors or search limits."
+msgstr "Recommendation reasons are AI assessments. A source match confirms a title listing, not chapter completeness or the claimed story development. Missing matches may be caused by title variants, source errors or search limits."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Remove OpenAI key"
+msgstr "Remove OpenAI key"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Romance manga with real relationship progress and little repetitive embarrassment."
+msgstr "Romance manga with real relationship progress and little repetitive embarrassment."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Save AI settings"
+msgstr "Save AI settings"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Search cancelled"
+msgstr "Search cancelled"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Search completed"
+msgstr "Search completed"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Search failed"
+msgstr "Search failed"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Search this title manually"
+msgstr "Search this title manually"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Search time limit reached"
+msgstr "Search time limit reached"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Searching"
+msgstr "Searching"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Searching installed sources"
+msgstr "Searching installed sources"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Select all enabled sources"
+msgstr "Select all enabled sources"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Selected sources"
+msgstr "Selected sources"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Source check details"
+msgstr "Source check details"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Source queries"
+msgstr "Source queries"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Sources and languages"
+msgstr "Sources and languages"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Sources are checked three at a time, using titles and alternative names on the first two result pages. The search stops after four minutes and keeps partial results."
+msgstr "Sources are checked three at a time, using titles and alternative names on the first two result pages. The search stops after four minutes and keeps partial results."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Sources checked"
+msgstr "Sources checked"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Test saved connection"
+msgstr "Test saved connection"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Understanding your request"
+msgstr "Understanding your request"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "What would you like to read?"
+msgstr "What would you like to read?"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Your search request is sent to OpenAI when you start an AI search. The API is billed separately from ChatGPT. Manga pages and your library are not sent."
+msgstr "Your search request is sent to OpenAI when you start an AI search. The API is billed separately from ChatGPT. Manga pages and your library are not sent."

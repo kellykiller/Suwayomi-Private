@@ -50,6 +50,10 @@ export const AppRoutes = {
         match: 'settings',
         path: '/settings',
         children: {
+            ai: {
+                match: 'ai',
+                path: '/settings/ai',
+            },
             privateUpdates: {
                 match: 'private-updates',
                 path: '/settings/private-updates',
@@ -142,6 +146,10 @@ export const AppRoutes = {
         match: 'sources',
         path: '/sources',
         children: {
+            aiSearch: {
+                match: 'ai/search',
+                path: '/sources/ai/search',
+            },
             browse: {
                 match: ':sourceId',
                 path: (sourceId: SourceIdInfo['id'], query?: string | null | undefined) =>

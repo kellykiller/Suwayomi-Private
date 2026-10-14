@@ -22,6 +22,7 @@ import PaletteIcon from '@mui/icons-material/Palette';
 import HistoryIcon from '@mui/icons-material/History';
 import ImageIcon from '@mui/icons-material/Image';
 import SystemUpdateAltIcon from '@mui/icons-material/SystemUpdateAlt';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { useLingui } from '@lingui/react/macro';
 import { ListItemLink } from '@/base/components/lists/ListItemLink.tsx';
 import { AppRoutes } from '@/base/AppRoute.constants.ts';
@@ -105,6 +106,12 @@ export function Settings() {
                     <SystemUpdateAltIcon />
                 </ListItemIcon>
                 <ListItemText primary={t`Private updates`} />
+            </ListItemLink>
+            <ListItemLink to={AppRoutes.settings.children.ai.path}>
+                <ListItemIcon>
+                    <AutoAwesomeIcon />
+                </ListItemIcon>
+                <ListItemText primary={t`AI settings`} />
             </ListItemLink>
             <ListItemLink to={AppRoutes.settings.children.server.path}>
                 <ListItemIcon>

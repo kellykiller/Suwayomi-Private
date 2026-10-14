@@ -25,6 +25,7 @@ import {
     inspect,
 } from './common.mjs';
 import { activeJob, createJob, jobIdValid } from './worker.mjs';
+import { createAiService } from './ai.mjs';
 
 const hop = new Set([
     'connection',
@@ -126,12 +127,14 @@ export function createGateway({
     jobReader = activeJob,
     stateExists = exists,
     stateRead = readJson,
+    aiService,
 } = {}) {
     const target = new URL(upstream);
     assert(
         target.protocol === 'http:' && !target.username && !target.password && target.pathname === '/',
         'Ungültiges internes Suwayomi-Ziel.',
     );
+    const ai = aiService || createAiService({ upstream: target, fetchImpl });
     const server = http.createServer(async (req, res) => {
         try {
             assert(
@@ -176,9 +179,31 @@ export function createGateway({
             if (url.pathname.startsWith('/private-api/')) {
                 if (!user.canManage)
                     return json(res, 403, {
-                        error: 'Die private Updateverwaltung benötigt die bestehende Suwayomi-Basic-Auth-Anmeldung.',
+                        error: 'Die privaten Funktionen benötigen die bestehende Suwayomi-Basic-Auth-Anmeldung.',
                     });
                 const config = await configLoader();
+                if (url.pathname.startsWith('/private-api/ai/')) {
+                    if (req.method === 'GET' && url.pathname === '/private-api/ai/settings')
+                        return json(res, 200, await ai.status());
+                    if (req.method === 'GET' && url.pathname === '/private-api/ai/active')
+                        return json(res, 200, { job: ai.active(req) });
+                    const id = url.pathname.match(/^\/private-api\/ai\/jobs\/([a-f0-9-]{36})$/)?.[1];
+                    if (req.method === 'GET' && id) return json(res, 200, ai.get(id, req));
+                    if (req.method !== 'POST') return json(res, 404, { error: 'Unbekannte KI-Aktion.' });
+                    if (!sameOrigin(req, config.origins))
+                        return json(res, 403, {
+                            error: 'Diese Aktion muss von derselben Suwayomi-Seite gestartet werden.',
+                        });
+                    const input = await body(req);
+                    if (url.pathname === '/private-api/ai/settings') return json(res, 200, await ai.save(input));
+                    if (url.pathname === '/private-api/ai/test') return json(res, 200, await ai.testConnection());
+                    if (url.pathname === '/private-api/ai/search') return json(res, 202, await ai.start(input, req));
+                    if (url.pathname === '/private-api/ai/cancel') {
+                        assert(jobIdValid(input.id), 'Ungültige Suchkennung.');
+                        return json(res, 200, ai.cancel(input.id, req));
+                    }
+                    return json(res, 404, { error: 'Unbekannte KI-Aktion.' });
+                }
                 const keys = await secretLoader();
                 const api = portainerClient(config.portainerUrl, keys.portainer, fetchImpl);
                 if (req.method === 'GET' && url.pathname === '/private-api/status') {
@@ -283,10 +308,11 @@ export function createGateway({
                     .on('error', () => res.destroy())
                     .pipe(res);
         } catch (error) {
-            if (!res.headersSent) json(res, 400, { error: error.message });
+            if (!res.headersSent) json(res, error.status === 404 ? 404 : 400, { error: error.message });
             else res.destroy();
         }
     });
+    server.on('close', () => ai.stop());
     server.on('upgrade', (req, socket, head) => {
         if (!req.url.startsWith('/api/')) {
             socket.destroy();

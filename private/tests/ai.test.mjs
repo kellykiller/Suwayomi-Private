@@ -1,0 +1,382 @@
+/* SPDX-License-Identifier: MPL-2.0 */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import * as fs from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createAiService, recommend, titleMatches, validatePlan, AI_DEFAULTS } from '../server/ai.mjs';
+import { createGateway } from '../server/gateway.mjs';
+
+const key = 'sk-proj-' + 'fixtureOnly'.repeat(5);
+const request = { headers: { authorization: 'Basic Zml4dHVyZTpwYXNzd29yZA==' } };
+const plan = {
+    summary: 'Kämpfe und eine zusammenhängende Abenteuerhandlung.',
+    criteria: ['Viele Kämpfe', 'Abenteuer'],
+    notice: '',
+    recommendations: [
+        {
+            title: 'Naruto',
+            aliases: ['ナルト'],
+            reason: 'Viele Kämpfe und eine feste Hauptgruppe.',
+            caveat: 'Einige längere Rückblicke.',
+        },
+    ],
+};
+const json = (value, status = 200) =>
+    new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
+const modelResult = (value = plan) =>
+    json({
+        status: 'completed',
+        output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
+        usage: { input_tokens: 100, output_tokens: 80 },
+    });
+async function fixture(t, options = {}) {
+    const root = await fs.mkdtemp(join(tmpdir(), 'suwayomi-ai-'));
+    const secrets = root + '/secrets';
+    await fs.mkdir(secrets);
+    let modelCalls = 0;
+    const calls = [];
+    const fetchImpl = async (url, input) => {
+        calls.push({ url: String(url), input });
+        if (String(url) === 'https://api.openai.com/v1/responses') {
+            modelCalls++;
+            return options.model ? options.model(input) : modelResult();
+        }
+        if (String(url).startsWith('https://api.openai.com/v1/models/')) return json({ id: 'gpt-5.4-mini' });
+        const body = JSON.parse(input.body);
+        if (body.query.includes('query AiSources'))
+            return json({
+                data: {
+                    sources: {
+                        nodes: [
+                            { id: '1', displayName: 'Source A', lang: 'en' },
+                            { id: '2', displayName: 'Source B', lang: 'de' },
+                            { id: '3', displayName: 'Source C', lang: 'ja' },
+                            { id: '0', displayName: 'Local', lang: 'other' },
+                        ],
+                    },
+                },
+            });
+        return options.source
+            ? options.source(body.variables.input, input)
+            : json({
+                  data: {
+                      fetchSourceManga: { hasNextPage: false, mangas: [{ id: 10, title: 'Naruto', inLibrary: true }] },
+                  },
+              });
+    };
+    const service = createAiService({
+        upstream: 'http://127.0.0.1:18082',
+        stateRoot: root,
+        secretRoot: secrets,
+        fetchImpl,
+        requestDelay: 0,
+        cooldown: 0,
+        ...options.timing,
+    });
+    await service.save({ key, enabled: true });
+    t.after(async () => {
+        service.stop();
+        await fs.rm(root, { recursive: true, force: true });
+    });
+    return { service, root, secrets, calls, modelCalls: () => modelCalls };
+}
+async function finished(service, id, req = request) {
+    for (let i = 0; i < 200; i++) {
+        const job = service.get(id, req);
+        if (job.finished) return job;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    throw new Error('Fixture search did not finish');
+}
+const input = { prompt: 'Wie One Piece, aber mit mehr Kämpfen', language: 'de', sourceIds: ['1', '2', '3'] };
+
+test('AI requests use a fixed OpenAI endpoint, bounded structured output and no storage; errors never echo provider bodies', async () => {
+    let seen;
+    const result = await recommend({
+        key,
+        settings: AI_DEFAULTS,
+        prompt: 'Romance mit Fortschritt',
+        language: 'de',
+        signal: AbortSignal.timeout(1000),
+        fetchImpl: async (url, options) => {
+            seen = { url, options };
+            return modelResult();
+        },
+    });
+    const body = JSON.parse(seen.options.body);
+    assert.equal(seen.url, 'https://api.openai.com/v1/responses');
+    assert.equal(seen.options.redirect, 'error');
+    assert.equal(body.store, false);
+    assert.equal(body.text.format.strict, true);
+    assert.equal(body.max_output_tokens, 4500);
+    assert.equal(body.reasoning.effort, 'low');
+    assert(!seen.options.body.includes(key));
+    assert.equal(result.plan.recommendations[0].title, 'Naruto');
+    await assert.rejects(
+        recommend({
+            key,
+            settings: AI_DEFAULTS,
+            prompt: 'test',
+            language: 'de',
+            fetchImpl: async () => json({ message: key }, 401),
+        }),
+        (error) => /API-Key/.test(error.message) && !error.message.includes(key),
+    );
+    await assert.rejects(
+        recommend({
+            key,
+            settings: AI_DEFAULTS,
+            prompt: 'test',
+            language: 'de',
+            fetchImpl: async () => json({ status: 'incomplete', output: [] }),
+        }),
+        /vollständig/,
+    );
+    await assert.rejects(
+        recommend({
+            key,
+            settings: AI_DEFAULTS,
+            prompt: 'test',
+            language: 'de',
+            fetchImpl: async () =>
+                json({ status: 'completed', output: [{ type: 'message', content: [{ type: 'refusal' }] }] }),
+        }),
+        /nicht beantworten/,
+    );
+});
+test('Title matching tolerates punctuation and accents but does not merge sequels, spin-offs or related works', () => {
+    assert(titleMatches('One-Piece', ['One Piece']));
+    assert(titleMatches('Pokémon', ['Pokemon']));
+    assert(titleMatches('ナルト', ['Naruto', 'ナルト']));
+    assert(!titleMatches('Boruto', ['Naruto']));
+    assert(!titleMatches('Naruto: Sasuke Story', ['Naruto']));
+    assert(!titleMatches('One Piece Novel', ['One Piece']));
+    assert.throws(() =>
+        validatePlan({ ...plan, recommendations: [{ ...plan.recommendations[0], aliases: Array(5).fill('fake') }] }, 6),
+    );
+    const deduped = validatePlan(
+        { ...plan, recommendations: [plan.recommendations[0], { ...plan.recommendations[0], title: 'NARUTO' }] },
+        6,
+    );
+    assert.equal(deduped.recommendations.length, 1);
+});
+test(
+    'Cross-source search uses real manga IDs, aliases and second result pages while a failing source does not block others',
+    { timeout: 4000 },
+    async (t) => {
+        const f = await fixture(t, {
+            source: async ({ source, query, page }) => {
+                if (source === '2') return json({ errors: [{ message: 'never expose backend credentials' }] });
+                if (source === '1' && page === 1)
+                    return json({
+                        data: {
+                            fetchSourceManga: {
+                                hasNextPage: true,
+                                mangas: [{ id: 999, title: 'Boruto', inLibrary: false }],
+                            },
+                        },
+                    });
+                if (source === '1')
+                    return json({
+                        data: {
+                            fetchSourceManga: {
+                                hasNextPage: false,
+                                mangas: [{ id: 10, title: 'Naruto', inLibrary: true }],
+                            },
+                        },
+                    });
+                return json({
+                    data: {
+                        fetchSourceManga: {
+                            hasNextPage: false,
+                            mangas: query === 'ナルト' ? [{ id: 30, title: 'ナルト', inLibrary: false }] : [],
+                        },
+                    },
+                });
+            },
+        });
+        const job = await f.service.start(input, request);
+        const result = await finished(f.service, job.id);
+        assert.equal(result.phase, 'completed');
+        assert.equal(result.completedSources, 2);
+        assert.deepEqual(result.recommendations[0].matches.map((match) => match.id).sort(), [10, 30]);
+        assert.equal(result.sources.find((source) => source.id === '2').phase, 'failed');
+        assert(!JSON.stringify(result).includes('never expose'));
+        assert(!JSON.stringify(result).includes(key));
+        assert(!JSON.stringify(result).includes(request.headers.authorization));
+        const backendCalls = f.calls.filter((call) => call.url.endsWith('/api/graphql'));
+        assert(backendCalls.every((call) => call.input.headers.Authorization === request.headers.authorization));
+        assert(
+            f.calls
+                .filter((call) => call.url.includes('api.openai.com'))
+                .every((call) => call.input.headers.Authorization === `Bearer ${key}`),
+        );
+        assert.equal(f.modelCalls(), 1);
+    },
+);
+test(
+    'Repeated requests reuse the protected AI plan but re-check source availability; credentials remain masked and removable',
+    { timeout: 4000 },
+    async (t) => {
+        let available = true;
+        const f = await fixture(t, {
+            source: async () =>
+                json({
+                    data: {
+                        fetchSourceManga: {
+                            hasNextPage: false,
+                            mangas: available ? [{ id: 10, title: 'Naruto', inLibrary: false }] : [],
+                        },
+                    },
+                }),
+        });
+        const first = await f.service.start({ ...input, sourceIds: ['1'] }, request);
+        const a = await finished(f.service, first.id);
+        assert.equal(a.recommendations[0].matches.length, 1);
+        available = false;
+        const second = await f.service.start({ ...input, sourceIds: ['1'] }, request);
+        const b = await finished(f.service, second.id);
+        assert.equal(b.cached, true);
+        assert.equal(b.recommendations[0].matches.length, 0);
+        assert.equal(f.modelCalls(), 1);
+        assert.deepEqual(b.usage, { inputTokens: 0, outputTokens: 0 });
+        const status = await f.service.status();
+        assert.equal(status.configured, true);
+        assert(!JSON.stringify(status).includes(key));
+        for (const path of [
+            f.secrets + '/openai.token',
+            f.root + '/ai-settings.json',
+            f.root + '/ai-cache/' + (await fs.readdir(f.root + '/ai-cache'))[0],
+        ])
+            assert.equal((await fs.stat(path)).mode & 0o777, 0o600);
+        assert.equal((await fs.stat(f.root + '/ai-cache')).mode & 0o777, 0o700);
+        await f.service.testConnection();
+        assert.equal(f.modelCalls(), 1);
+        await f.service.save({ key: '', resultCount: 4 });
+        assert.equal(await fs.readFile(f.secrets + '/openai.token', 'utf8'), key + '\n');
+        await f.service.save({ removeKey: true });
+        assert.equal((await f.service.status()).configured, false);
+        assert.equal((await f.service.status()).enabled, false);
+        await assert.rejects(f.service.start(input, request), /aktivieren/);
+    },
+);
+test('Invalid sources and excessive input are rejected before any paid model call', async (t) => {
+    const f = await fixture(t);
+    await assert.rejects(f.service.start({ ...input, sourceIds: ['999'] }, request), /nicht mehr installiert/);
+    await assert.rejects(f.service.start({ ...input, prompt: 'x'.repeat(2001) }, request), /ungültig/);
+    await assert.rejects(f.service.start({ ...input, sourceIds: Array(101).fill('1') }, request), /100/);
+    await assert.rejects(f.service.save({ model: 'http://evil.example' }), /Ungültige KI/);
+    assert.equal(f.modelCalls(), 0);
+});
+function untilAbort(signal) {
+    return new Promise((resolve, reject) => {
+        if (signal.aborted) reject(signal.reason);
+        else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+}
+test(
+    'Simultaneous starts cannot double-charge; job results belong to their authenticated caller and cancellation releases the search',
+    { timeout: 4000 },
+    async (t) => {
+        const f = await fixture(t, { model: async ({ signal }) => untilAbort(signal) });
+        const attempts = await Promise.allSettled([f.service.start(input, request), f.service.start(input, request)]);
+        assert.equal(attempts.filter((item) => item.status === 'fulfilled').length, 1);
+        const job = attempts.find((item) => item.status === 'fulfilled').value;
+        assert.equal(f.service.active(request).id, job.id);
+        assert.equal(f.service.active({ headers: { authorization: 'Basic other' } }), null);
+        assert.throws(
+            () => f.service.get(job.id, { headers: { authorization: 'Basic other' } }),
+            (error) => error.status === 404,
+        );
+        await assert.rejects(f.service.save({ resultCount: 4 }), /laufende/);
+        f.service.cancel(job.id, request);
+        const result = await finished(f.service, job.id);
+        assert.equal(result.phase, 'cancelled');
+        assert.equal(f.service.active(request), null);
+        await f.service.save({ enabled: false });
+    },
+);
+test(
+    'Source time limits preserve existing verified matches and mark unfinished sources',
+    { timeout: 4000 },
+    async (t) => {
+        const f = await fixture(t, {
+            timing: { searchTimeout: 90, requestTimeout: 1000 },
+            source: async ({ source }, { signal }) =>
+                source === '1'
+                    ? json({
+                          data: {
+                              fetchSourceManga: {
+                                  hasNextPage: false,
+                                  mangas: [{ id: 10, title: 'Naruto', inLibrary: false }],
+                              },
+                          },
+                      })
+                    : untilAbort(signal),
+        });
+        const job = await f.service.start(input, request);
+        const result = await finished(f.service, job.id);
+        assert.equal(result.phase, 'partial');
+        assert.deepEqual(
+            result.recommendations[0].matches.map((match) => match.id),
+            [10],
+        );
+        assert.equal(result.sources.find((source) => source.id === '2').phase, 'interrupted');
+    },
+);
+test(
+    'AI gateway actions require verified Basic Auth and same-origin POST; key management does not depend on updater tokens',
+    { timeout: 4000 },
+    async (t) => {
+        const f = await fixture(t);
+        const server = createGateway({
+            upstream: 'http://127.0.0.1:18082',
+            manifest: { commit: 'a'.repeat(40), version: '0.2.0' },
+            aiService: f.service,
+            configLoader: async () => ({ origins: ['https://reader.example'] }),
+            secretLoader: async () => {
+                throw new Error('Updater tokens should not be loaded');
+            },
+            fetchImpl: async (url, options) =>
+                options.headers.Authorization === request.headers.authorization
+                    ? json({ data: { settings: { authMode: 'BASIC_AUTH' }, aboutServer: { version: 'v2.4.2366' } } })
+                    : new Response(null, { status: 401 }),
+        });
+        await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+        const url = 'http://127.0.0.1:' + server.address().port;
+        t.after(async () => {
+            server.closeAllConnections();
+            await new Promise((resolve) => server.close(resolve));
+        });
+        const missing = await fetch(url + '/private-api/ai/settings');
+        assert.equal(missing.status, 401);
+        const status = await fetch(url + '/private-api/ai/settings', {
+            headers: { Authorization: request.headers.authorization },
+        });
+        assert.equal(status.status, 200);
+        assert(!(await status.text()).includes(key));
+        const headers = {
+            Authorization: request.headers.authorization,
+            'Content-Type': 'application/json',
+            'X-Suwayomi-Private': '1',
+            Origin: 'https://evil.example',
+        };
+        const cross = await fetch(url + '/private-api/ai/settings', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ removeKey: true }),
+        });
+        assert.equal(cross.status, 403);
+        assert.equal((await f.service.status()).configured, true);
+        const valid = await fetch(url + '/private-api/ai/settings', {
+            method: 'POST',
+            headers: { ...headers, Origin: 'https://reader.example' },
+            body: JSON.stringify({ enabled: false }),
+        });
+        assert.equal(valid.status, 200);
+        assert.equal((await valid.json()).enabled, false);
+        const absent = await fetch(url + '/private-api/ai/jobs/' + 'a'.repeat(36), { headers });
+        assert.equal(absent.status, 404);
+    },
+);

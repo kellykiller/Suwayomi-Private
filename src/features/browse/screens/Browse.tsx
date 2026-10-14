@@ -21,6 +21,10 @@ import { SearchParam } from '@/base/Base.types.ts';
 import { Migration } from '@/features/migration/screens/Migration.tsx';
 import { OffsetComponentWithContainer } from '@/base/OffsetComponent.tsx';
 import { useElementSize } from '@mantine/hooks';
+import { loadable } from 'react-lazily/loadable';
+import { lazyLoadFallback } from '@/base/utils/LazyLoad.tsx';
+
+const { AiSearch } = loadable(() => import('@/features/ai-search/AiSearch.tsx'), lazyLoadFallback);
 
 export function Browse() {
     const { t } = useLingui();
@@ -50,6 +54,7 @@ export function Browse() {
                         <Tab value={BrowseTab.SOURCES} sx={{ textTransform: 'none' }} label={t`Source`} />
                         <Tab value={BrowseTab.EXTENSIONS} sx={{ textTransform: 'none' }} label={t`Extension`} />
                         <Tab value={BrowseTab.MIGRATE} sx={{ textTransform: 'none' }} label={t`Migrate`} />
+                        <Tab value={BrowseTab.AI_SEARCH} sx={{ textTransform: 'none' }} label={t`AI search`} />
                     </TabsMenu>
                 }
             >
@@ -64,6 +69,9 @@ export function Browse() {
                 </TabPanel>
                 <TabPanel index={BrowseTab.MIGRATE} currentIndex={tabName}>
                     <Migration />
+                </TabPanel>
+                <TabPanel index={BrowseTab.AI_SEARCH} currentIndex={tabName}>
+                    <AiSearch />
                 </TabPanel>
             </OffsetComponentWithContainer>
         </TabsWrapper>

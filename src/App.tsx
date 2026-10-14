@@ -79,6 +79,8 @@ const { ServerSettings } = loadable(() => import('@/features/settings/screens/Se
 const { BrowseSettings } = loadable(() => import('@/features/browse/screens/BrowseSettings.tsx'), lazyLoadFallback);
 const { WebUISettings } = loadable(() => import('@/features/settings/screens/WebUISettings.tsx'), lazyLoadFallback);
 const { PrivateUpdates } = loadable(() => import('@/features/private-updates/PrivateUpdates.tsx'), lazyLoadFallback);
+const { AiSettings } = loadable(() => import('@/features/ai-search/AiSettings.tsx'), lazyLoadFallback);
+const { AiSearch } = loadable(() => import('@/features/ai-search/AiSearch.tsx'), lazyLoadFallback);
 const { Migration } = loadable(() => import('@/features/migration/screens/Migration.tsx'), lazyLoadFallback);
 const { DeviceSetting } = loadable(() => import('@/features/device/screens/DeviceSetting.tsx'), lazyLoadFallback);
 const { TrackingSettings } = loadable(
@@ -329,6 +331,7 @@ const MainApp = () => {
                             <Route path={AppRoutes.settings.children.backup.match} element={<Backup />} />
                             <Route path={AppRoutes.settings.children.server.match} element={<ServerSettings />} />
                             <Route path={AppRoutes.settings.children.webui.match} element={<WebUISettings />} />
+                            <Route path={AppRoutes.settings.children.ai.match} element={<AiSettings />} />
                             <Route
                                 path={AppRoutes.settings.children.privateUpdates.match}
                                 element={<PrivateUpdates />}
@@ -354,6 +357,7 @@ const MainApp = () => {
                             <Route path={AppRoutes.sources.children.browse.match} element={<SourceMangas />} />
                             <Route path={AppRoutes.sources.children.configure.match} element={<SourceConfigure />} />
                             <Route path={AppRoutes.sources.children.searchAll.match} element={<SearchAll />} />
+                            <Route path={AppRoutes.sources.children.aiSearch.match} element={<AiSearch />} />
                         </Route>
                         <Route path={AppRoutes.extension.match}>
                             {/* TODO: deprecated - "source" and "extension" page got merged into "browse" */}

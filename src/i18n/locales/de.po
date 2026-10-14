@@ -4707,3 +4707,235 @@ msgstr "API-Schlüssel gespeichert"
 #: src/features/private-updates/PrivateUpdates.tsx
 msgid "Check for updates"
 msgstr "Updates prüfen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "A key is saved on the NAS. Leave this field empty to keep it."
+msgstr "Ein Schlüssel ist auf dem NAS gespeichert. Leer lassen, um ihn beizubehalten."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "AI answer reused from cache"
+msgstr "KI-Antwort aus dem Zwischenspeicher übernommen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "AI model"
+msgstr "KI-Modell"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "AI search"
+msgstr "KI-Suche"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "AI settings"
+msgstr "KI-Einstellungen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "AI settings saved"
+msgstr "KI-Einstellungen gespeichert"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "All source languages"
+msgstr "Alle Quellensprachen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Cancel search"
+msgstr "Suche abbrechen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Checked"
+msgstr "Geprüft"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Clear results"
+msgstr "Ergebnisse leeren"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Configure and enable AI search in the settings first."
+msgstr "Bitte zuerst die KI-Suche in den Einstellungen einrichten und aktivieren."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Connection successful"
+msgstr "Verbindung erfolgreich"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Connection testing checks model access without generating a paid AI response. It does not check your remaining API credit."
+msgstr "Der Verbindungstest prüft den Modellzugriff ohne kostenpflichtige KI-Antwort. Er prüft nicht dein verbleibendes API-Guthaben."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Considerations"
+msgstr "Zu beachten"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Describe what you want to read. AI suggests titles and Suwayomi looks for them across your selected installed sources."
+msgstr "Beschreibe, was du lesen möchtest. Die KI schlägt Titel vor und Suwayomi sucht sie quellenübergreifend in deinen ausgewählten installierten Quellen."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Disabled sources and your adult-content preference are respected. Pinning does not limit AI search. Up to 100 sources can be checked per search."
+msgstr "Deaktivierte Quellen und deine Einstellung zu Erwachsenen-Inhalten werden berücksichtigt. Angeheftete Quellen begrenzen die KI-Suche nicht. Pro Suche können bis zu 100 Quellen geprüft werden."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Enable AI search"
+msgstr "KI-Suche aktivieren"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Find manga like One Piece, but with more fights."
+msgstr "Suche Manga ähnlich wie One Piece, aber mit mehr Kämpfen."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Find recommendations"
+msgstr "Vorschläge finden"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "In library"
+msgstr "In der Bibliothek"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Input tokens"
+msgstr "Eingabe-Tokens"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Low"
+msgstr "Niedrig"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Low is the starting point for faster searches. Medium may improve difficult requests and uses more tokens."
+msgstr "Niedrig ist der Ausgangspunkt für schnellere Suchen. Mittel kann schwierige Anfragen verbessern und benötigt mehr Tokens."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Maximum recommendations"
+msgstr "Maximale Anzahl an Vorschlägen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "More result pages remain unchecked"
+msgstr "Weitere Ergebnisseiten wurden nicht geprüft"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "No OpenAI key is configured yet."
+msgstr "Noch kein OpenAI-Key eingerichtet."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "No matching listing found in the checked sources"
+msgstr "Keinen passenden Titeleintrag in den geprüften Quellen gefunden"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "No matching listing found yet"
+msgstr "Bisher keinen passenden Titeleintrag gefunden"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "No recommendations to display. Try adjusting your request or sources."
+msgstr "Keine Vorschläge anzuzeigen. Passe deinen Suchwunsch oder die Quellen an."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Not fully checked"
+msgstr "Nicht vollständig geprüft"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "One AI request per new search. Identical requests reuse the AI answer for 24 hours; source availability is checked again."
+msgstr "Eine KI-Anfrage pro neuer Suche. Identische Anfragen verwenden die KI-Antwort 24 Stunden lang erneut; die Quellen werden trotzdem neu geprüft."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Only show titles found in sources"
+msgstr "Nur Titel mit Quellentreffern anzeigen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Open AI search"
+msgstr "KI-Suche öffnen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "OpenAI API key"
+msgstr "OpenAI-API-Key"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "OpenAI key removed"
+msgstr "OpenAI-Key entfernt"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Output tokens"
+msgstr "Ausgabe-Tokens"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Reasoning effort"
+msgstr "Reasoning-Stufe"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Recommendation reasons are AI assessments. A source match confirms a title listing, not chapter completeness or the claimed story development. Missing matches may be caused by title variants, source errors or search limits."
+msgstr "Die Begründungen sind Einschätzungen der KI. Ein Quellentreffer bestätigt einen Titeleintrag, aber nicht die Vollständigkeit der Kapitel oder die beschriebene Handlungsentwicklung. Fehlende Treffer können an Titelvarianten, Quellenfehlern oder Suchlimits liegen."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Remove OpenAI key"
+msgstr "OpenAI-Key entfernen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Romance manga with real relationship progress and little repetitive embarrassment."
+msgstr "Romance-Manga mit echter Beziehungsentwicklung und wenig ständig wiederholter Peinlichkeit."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Save AI settings"
+msgstr "KI-Einstellungen speichern"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Search cancelled"
+msgstr "Suche abgebrochen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Search completed"
+msgstr "Suche abgeschlossen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Search this title manually"
+msgstr "Diesen Titel manuell suchen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Search time limit reached"
+msgstr "Zeitlimit der Suche erreicht"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Searching"
+msgstr "Suche läuft"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Searching installed sources"
+msgstr "Installierte Quellen werden durchsucht"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Select all enabled sources"
+msgstr "Alle aktivierten Quellen auswählen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Selected sources"
+msgstr "Ausgewählte Quellen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Source check details"
+msgstr "Details zur Quellenprüfung"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Source queries"
+msgstr "Quellenanfragen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Sources and languages"
+msgstr "Quellen und Sprachen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Sources are checked three at a time, using titles and alternative names on the first two result pages. The search stops after four minutes and keeps partial results."
+msgstr "Es werden drei Quellen gleichzeitig anhand von Titeln und alternativen Namen auf den ersten beiden Ergebnisseiten geprüft. Nach vier Minuten endet die Suche; Teilergebnisse bleiben erhalten."
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Sources checked"
+msgstr "Geprüfte Quellen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Test saved connection"
+msgstr "Gespeicherte Verbindung testen"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Understanding your request"
+msgstr "Suchwunsch wird ausgewertet"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "What would you like to read?"
+msgstr "Was möchtest du lesen?"
+
+#: src/features/ai-search/AiSearch.tsx
+msgid "Your search request is sent to OpenAI when you start an AI search. The API is billed separately from ChatGPT. Manga pages and your library are not sent."
+msgstr "Dein Suchwunsch wird beim Start einer KI-Suche an OpenAI gesendet. Die API wird getrennt von ChatGPT abgerechnet. Manga-Seiten und deine Bibliothek werden nicht übertragen."

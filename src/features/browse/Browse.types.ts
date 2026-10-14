@@ -17,6 +17,7 @@ export type MetadataBrowseSettings = {
 };
 
 export enum BrowseTab {
+    AI_SEARCH = 'ai-search',
     SOURCE_DEPRECATED = 'source',
     SOURCES = 'sources',
     EXTENSIONS = 'extensions',
