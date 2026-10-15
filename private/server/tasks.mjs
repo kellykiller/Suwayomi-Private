@@ -123,6 +123,7 @@ export function createTaskService({ translations, ai, jobReader, upstream, fetch
         } catch {
             result.warnings.push('Suwayomi-Downloads und Bibliotheksaktualisierung konnten nicht geladen werden.');
         }
+        result.tasks.sort((a, b) => Number(b.active) - Number(a.active));
         return result;
     }
     async function cancel(input, req) {

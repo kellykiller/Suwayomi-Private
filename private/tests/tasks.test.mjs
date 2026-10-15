@@ -95,6 +95,8 @@ test('Ready and paused tasks remain reopenable while completed tasks do not clut
     const value = await f.taskService.list(request);
     assert.equal(value.tasks.filter((task) => task.kind === 'translation').length, 1);
     assert.equal(value.tasks.find((task) => task.kind === 'translation').cancellable, false);
+    assert.equal(value.tasks[0].kind, 'ai');
+    assert.equal(value.tasks.at(-1).kind, 'translation');
 });
 test('Task cancellation requires native Basic Auth and same-origin headers before reaching a job controller', async (t) => {
     let cancels = 0;
