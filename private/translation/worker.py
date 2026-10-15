@@ -379,8 +379,8 @@ def render(root, options):
     checkpoints.mkdir(exist_ok=True)
     sync_directory(root)
     data = json.loads((root / 'content.json').read_text())
-    pages = data['pages']
-    for page in pages:
+    pages = [page for page in data['pages'] if page.get('translationComplete')]
+    for position, page in enumerate(pages):
         if options.get('page') is not None and page['index'] != options['page']:
             continue
         check_pause(root)
@@ -415,9 +415,10 @@ def render(root, options):
             sync_directory(output)
             page['warnings'] = warnings
             write_json(checkpoint, {'signature': signature, 'outputHash': hashlib.sha256((output / name).read_bytes()).hexdigest(), 'page': page})
+        page['renderComplete'] = True
         write_json(root / 'content.json', data)
-        write_json(root / 'progress.json', {'stage': 'render', 'completed': page['index'] + 1, 'total': len(pages)})
-        print(f"Seite {page['index'] + 1}/{len(pages)} gesetzt.", flush=True)
+        write_json(root / 'progress.json', {'stage': 'render', 'completed': position + 1, 'total': len(pages)})
+        print(f"Seite {page['index'] + 1} gesetzt ({position + 1}/{len(pages)} fertige Übersetzungen).", flush=True)
     return data
 
 

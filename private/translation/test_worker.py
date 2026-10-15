@@ -104,6 +104,7 @@ class WorkerTests(unittest.TestCase):
                 archive.writestr('002.png', image_bytes())
             pages = extract(root)
             for page in pages:
+                page['translationComplete'] = True
                 page['blocks'] = [{'id': f"p{page['index']}b0", 'box': [10, 10, 90, 80], 'text': 'HELLO', 'translated': 'Hallo', 'confidence': 0.99, 'rendered': False}]
             (root / 'content.json').write_text(json.dumps({'pages': pages}))
             real_render = render_page
@@ -135,6 +136,40 @@ class WorkerTests(unittest.TestCase):
                 (root / 'translated/0000.png').write_bytes(b'incomplete image')
                 render(root, {})
                 self.assertEqual(calls, [0])
+
+    def test_partial_render_skips_original_pages_and_reuses_previously_rendered_sample(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            with zipfile.ZipFile(root / 'input.cbz', 'w') as archive:
+                for index in range(3):
+                    archive.writestr(f'{index:03}.png', image_bytes())
+            pages = extract(root)
+            for page in pages:
+                page['blocks'] = [{'id': f"p{page['index']}b0", 'box': [10, 10, 90, 80], 'text': 'HELLO', 'translated': 'Hallo' if page['index'] == 2 else '', 'rendered': False}]
+                page['translationComplete'] = page['index'] == 2
+            (root / 'content.json').write_text(json.dumps({'pages': pages}))
+            calls = []
+            def render_sample(image, page):
+                calls.append(page['index'])
+                return render_page(image, page, FONT)
+            with patch('worker.render_page', render_sample):
+                first = render(root, {})
+                self.assertEqual(calls, [2])
+                self.assertFalse((root / 'translated/0000.png').exists())
+                self.assertFalse((root / 'translated/0001.png').exists())
+                self.assertTrue((root / 'translated/0002.png').exists())
+                self.assertTrue(first['pages'][2]['renderComplete'])
+                self.assertFalse(first['pages'][0].get('renderComplete', False))
+                progress = json.loads((root / 'progress.json').read_text())
+                self.assertEqual(progress, {'stage': 'render', 'completed': 1, 'total': 1})
+                for page in first['pages']:
+                    page['translationComplete'] = True
+                    page['blocks'][0]['translated'] = 'Hallo'
+                (root / 'content.json').write_text(json.dumps(first))
+                calls.clear()
+                second = render(root, {})
+                self.assertEqual(calls, [0, 1])
+                self.assertTrue(all(page['renderComplete'] for page in second['pages']))
 
     def test_local_archive_extraction_has_stable_order_and_does_not_change_archive(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -36,6 +36,8 @@ export type TranslationJob = {
     pageCount: number;
     blockCount: number;
     completedPages: number;
+    outputReady?: boolean;
+    requestedPages?: number[] | null;
     currentPage?: number;
     model: string;
     reasoning: 'low' | 'medium';
@@ -80,6 +82,7 @@ export type TranslationJob = {
         blocks: TranslationBlock[];
         warnings: string[];
         translationComplete?: boolean;
+        renderComplete?: boolean;
     }[];
 };
 export type TranslationChapter = {
@@ -91,7 +94,13 @@ export type TranslationChapter = {
     pageCount: number;
     manga: { id: number; title: string; source: { lang: string } };
 };
-export type TranslationAvailable = { id: string; revision: number; pages: string[] } | null;
+export type TranslationAvailable = {
+    id: string;
+    revision: number;
+    pages: string[];
+    translatedPages?: number;
+    pageCount?: number;
+} | null;
 export async function translationApi<T>(
     path: string,
     data?: Record<string, unknown>,

@@ -88,10 +88,10 @@ async function fixture(t, options = {}) {
         const folder = root + '/translations/' + job.id;
         if (options.worker) return options.worker(job, operation, signal, folder);
         if (operation === 'analyze') {
-            await writeJson(folder + '/content.json', specimen());
+            await writeJson(folder + '/content.json', options.data || specimen());
             for (const kind of ['original', 'preview']) {
                 await fs.mkdir(folder + '/' + kind, { recursive: true });
-                for (const index of [0, 1])
+                for (const { index } of (options.data || specimen()).pages)
                     await fs.writeFile(
                         `${folder}/${kind}/${String(index).padStart(4, '0')}.${kind === 'preview' ? 'jpg' : 'png'}`,
                         'image fixture',
@@ -99,7 +99,15 @@ async function fixture(t, options = {}) {
             }
         } else {
             const data = await readJson(folder + '/content.json');
-            for (const page of data.pages) for (const block of page.blocks) block.rendered = true;
+            for (const page of data.pages.filter((page) => page.translationComplete)) {
+                for (const block of page.blocks) block.rendered = true;
+                page.renderComplete = true;
+                await fs.mkdir(folder + '/translated', { recursive: true });
+                await fs.writeFile(
+                    `${folder}/translated/${String(page.index).padStart(4, '0')}.png`,
+                    'translated fixture',
+                );
+            }
             await writeJson(folder + '/content.json', data);
         }
     };
@@ -583,4 +591,152 @@ test('Invalid paid page results retain their cost but cannot poison the durable 
     await resume(f.service, job.id);
     assert.equal((await settled(f.service, job.id)).phase, 'completed');
     assert.equal(f.modelCalls.length, 4);
+});
+
+test('Selected test pages survive restart, additional samples reuse context, and whole-chapter completion only bills missing pages', async (t) => {
+    const data = specimen();
+    for (const index of [2, 3])
+        data.pages.push({
+            ...structuredClone(data.pages[0]),
+            index,
+            blocks: [
+                { ...structuredClone(data.pages[0].blocks[0]), id: `p${index}b0`, text: `Text page ${index + 1}` },
+            ],
+        });
+    const f = await fixture(t, { data, chapter: { ...chapter, pageCount: 4 } });
+    const job = await start(f.service);
+    await settled(f.service, job.id);
+    await resume(f.service, job.id, { pages: [2, 0] });
+    const first = await settled(f.service, job.id);
+    assert.equal(first.phase, 'partial');
+    assert.equal(first.completedPages, 2);
+    assert.deepEqual(first.requestedPages, [0, 2]);
+    assert.deepEqual(
+        first.pages.map((page) => !!page.translationComplete),
+        [true, false, true, false],
+    );
+    assert.deepEqual(
+        first.pages.map((page) => !!page.renderComplete),
+        [true, false, true, false],
+    );
+    assert.equal(f.modelCalls.length, 3); // one chapter context, two page calls
+    assert.equal(JSON.parse(f.modelCalls[0].input[0].content[0].text).pages.length, 4);
+    assert.deepEqual(
+        f.modelCalls.slice(1).map((call) => JSON.parse(call.input[0].content[0].text).currentPage),
+        [1, 3],
+    );
+    const available = await f.service.available(9);
+    assert.equal(available.translatedPages, 2);
+    assert.deepEqual(
+        available.pages.map((path) => path.includes('/translated/')),
+        [true, false, true, false],
+    );
+    assert.match((await f.service.file(job.id, 'original', 1)).path, /original\/0001.png$/);
+    await assert.rejects(f.service.file(job.id, 'translated', 1), /ENOENT/);
+    const paid = first.costUsd;
+    const renders = f.workerCalls.length;
+    await resume(f.service, job.id, { pages: [2, 0], consent: false });
+    assert.equal(f.modelCalls.length, 3);
+    assert.equal(f.workerCalls.length, renders);
+    assert.equal((await f.service.get(job.id)).costUsd, paid);
+    await f.service.edit({ id: job.id, page: 2, blocks: [{ id: 'p2b0', translated: 'Meine Testkorrektur' }] });
+    assert.equal((await settled(f.service, job.id)).phase, 'partial');
+    assert.equal(f.modelCalls.length, 3);
+    await f.service.stop();
+    const next = createTranslationService({
+        upstream: 'http://127.0.0.1:18082',
+        stateRoot: f.root,
+        secretRoot: f.root + '/secrets',
+        ledger: f.ledger,
+        fetchImpl: f.fetchImpl,
+        imageWorker: f.imageWorker,
+    });
+    t.after(() => next.stop());
+    const recovered = await next.get(job.id);
+    assert.equal(recovered.phase, 'partial');
+    assert.equal(recovered.pages[2].blocks[0].translated, 'Meine Testkorrektur');
+    await resume(next, job.id, { pages: [2, 3] });
+    const second = await settled(next, job.id);
+    assert.equal(second.phase, 'partial');
+    assert.equal(second.completedPages, 3);
+    assert.equal(f.modelCalls.length, 4);
+    assert.equal(JSON.parse(f.modelCalls[3].input[0].content[0].text).currentPage, 4);
+    await resume(next, job.id);
+    const done = await settled(next, job.id);
+    assert.equal(done.phase, 'completed');
+    assert.equal(done.completedPages, 4);
+    assert.equal(done.pages[2].blocks[0].translated, 'Meine Testkorrektur');
+    assert.equal(f.modelCalls.length, 5);
+    assert.equal(JSON.parse(f.modelCalls[4].input[0].content[0].text).currentPage, 2);
+    assert.equal((await f.ledger.history()).total, 5);
+    assert.equal((await next.available(9)).translatedPages, 4);
+    await resume(next, job.id, { pages: [0, 1, 2, 3] });
+    assert.equal(f.modelCalls.length, 5);
+});
+
+test('Empty, duplicate, fractional, out-of-range and non-array page selections fail before model calls or saved settings change', async (t) => {
+    const f = await fixture(t);
+    const job = await start(f.service);
+    await settled(f.service, job.id);
+    for (const pages of [[], [0, 0], [-1], [2], [0.5], ['0'], [NaN], null, '0', { 0: 0 }]) {
+        await assert.rejects(resume(f.service, job.id, { pages }), /gültige Seite/);
+        assert.equal(f.modelCalls.length, 0);
+        assert.equal((await f.service.get(job.id)).requestedPages, undefined);
+    }
+});
+
+test('Pausing a selected paid page preserves it and resumes only the selected scope without charging that page again', async (t) => {
+    let entered, release;
+    const active = new Promise((resolve) => {
+        entered = resolve;
+    });
+    const response = new Promise((resolve) => {
+        release = resolve;
+    });
+    const f = await fixture(t, {
+        model: async (body) => {
+            const prompt = JSON.parse(body.input[0].content[0].text);
+            if (prompt.blocks) {
+                entered();
+                await response;
+                return modelResponse({
+                    blocks: prompt.blocks.map((block) => ({ id: block.id, translated: 'Testseite', note: '' })),
+                });
+            }
+            return modelResponse({ summary: 'Kapitelkontext', glossary: [] });
+        },
+    });
+    const job = await start(f.service);
+    await settled(f.service, job.id);
+    await resume(f.service, job.id, { pages: [1] });
+    await active;
+    await f.service.pause(job.id);
+    release();
+    const paused = await settled(f.service, job.id);
+    assert.equal(paused.phase, 'paused');
+    assert.equal(paused.completedPages, 1);
+    assert.deepEqual(paused.requestedPages, [1]);
+    await resume(f.service, job.id, { pages: paused.requestedPages });
+    const done = await settled(f.service, job.id);
+    assert.equal(done.phase, 'partial');
+    assert.equal(done.completedPages, 1);
+    assert(!done.pages[0].translationComplete);
+    assert(done.pages[1].renderComplete);
+    assert.equal(f.modelCalls.length, 2);
+});
+
+test('A selected page without OCR text needs no model call; later text pages create the shared context once', async (t) => {
+    const data = specimen();
+    data.pages[1].blocks = [];
+    const f = await fixture(t, { data });
+    const job = await start(f.service);
+    await settled(f.service, job.id);
+    await resume(f.service, job.id, { pages: [1] });
+    const first = await settled(f.service, job.id);
+    assert.equal(first.phase, 'partial');
+    assert.equal(f.modelCalls.length, 0);
+    assert(first.pages[1].renderComplete);
+    await resume(f.service, job.id);
+    assert.equal((await settled(f.service, job.id)).phase, 'completed');
+    assert.equal(f.modelCalls.length, 2);
 });

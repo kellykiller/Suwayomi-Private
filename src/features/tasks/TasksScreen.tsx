@@ -22,6 +22,7 @@ const phases: Record<string, string> = {
     downloading: 'Lokalen Download einlesen',
     ocr: 'Texterkennung',
     ready: 'Bereit zur Prüfung',
+    partial: 'Teilübersetzung fertig',
     paused: 'Pausiert',
     context: 'Kapitelkontext',
     translating: 'Übersetzen',

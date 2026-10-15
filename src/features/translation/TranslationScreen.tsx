@@ -26,6 +26,7 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import { useAppTitle } from '@/features/navigation-bar/hooks/useAppTitle.ts';
 import { SpinnerImage } from '@/base/components/SpinnerImage.tsx';
 import { OcrPreview } from '@/features/translation/OcrPreview.tsx';
+import { TranslationPages } from '@/features/translation/TranslationPages.tsx';
 import { translationApi, translationImage } from '@/features/translation/Translation.api.ts';
 import type {
     OcrPerformance,
@@ -44,9 +45,10 @@ const phases: Record<string, string> = {
     translating: 'KI-Übersetzung',
     rendering: 'Übersetzung in Seiten einsetzen',
     completed: 'Übersetzung fertig',
+    partial: 'Teilübersetzung fertig – weitere Seiten auswählbar',
     paused: 'Pausiert',
 };
-const isRunning = (phase?: string) => !!phase && !['ready', 'paused', 'completed'].includes(phase);
+const isRunning = (phase?: string) => !!phase && !['ready', 'paused', 'partial', 'completed'].includes(phase);
 const money = (value: number | null | undefined) =>
     value === null || value === undefined ? 'unbekannt' : `$${value.toFixed(5)}`;
 
@@ -66,6 +68,8 @@ export function TranslationScreen() {
     const [acknowledgeUnknown, setAcknowledgeUnknown] = useState(false);
     const [page, setPage] = useState(0);
     const [previewOpen, setPreviewOpen] = useState(false);
+    const [scope, setScope] = useState<'all' | 'selected'>('all');
+    const [selectedPages, setSelectedPages] = useState<number[]>([]);
     const [draft, setDraft] = useState<TranslationBlock[]>([]);
     const [error, setError] = useState('');
     const [connectionError, setConnectionError] = useState('');
@@ -156,6 +160,10 @@ export function TranslationScreen() {
     useEffect(() => {
         setDraft(structuredClone(job?.pages?.[page]?.blocks || []));
     }, [job?.id, job?.phase, job?.revision, page]);
+    useEffect(() => {
+        setScope(job?.requestedPages ? 'selected' : 'all');
+        setSelectedPages(job?.requestedPages ?? []);
+    }, [job?.id]);
     const execute = async (action: () => Promise<void>) => {
         setPending(true);
         setError('');
@@ -171,6 +179,12 @@ export function TranslationScreen() {
     const running = isRunning(job?.phase);
     const anyRunning = jobs.some((item) => isRunning(item.phase));
     const current = job?.pages?.[page];
+    const included = job?.pages?.filter((item) => scope === 'all' || selectedPages.includes(item.index)) ?? [];
+    const hasSelectedWork = included.some((item) => !item.translationComplete || !item.renderComplete);
+    const translateLabel =
+        scope === 'selected'
+            ? 'Ausgewählte Seiten übersetzen / fortsetzen'
+            : 'Fehlende Kapitelseiten übersetzen / fortsetzen';
     return (
         <Stack spacing={2} sx={{ p: 2, maxWidth: 1200, mx: 'auto' }}>
             <Typography variant="h5">Kapitelübersetzung</Typography>
@@ -395,7 +409,7 @@ export function TranslationScreen() {
                                     Verarbeitung sofort abbrechen
                                 </Button>
                             )}
-                            {job.phase === 'completed' && (
+                            {(job.outputReady || job.phase === 'completed') && (
                                 <Button
                                     component={Link}
                                     to={AppRoutes.reader.path(job.mangaId, job.sourceOrder)}
@@ -406,12 +420,12 @@ export function TranslationScreen() {
                             )}
                         </Stack>
                     </Paper>
-                    {['ready', 'paused'].includes(job.phase) && (
+                    {['ready', 'paused', 'partial'].includes(job.phase) && (
                         <Paper variant="outlined" sx={{ p: 2 }}>
                             <Stack spacing={2}>
                                 <Typography variant="h6">
                                     {job.blockCount
-                                        ? 'Übersetzung starten oder fortsetzen'
+                                        ? 'Seiten oder Kapitel übersetzen'
                                         : 'Lokale Texterkennung fortsetzen'}
                                 </Typography>
                                 <Typography color="text.secondary">
@@ -421,6 +435,14 @@ export function TranslationScreen() {
                                 </Typography>
                                 {!!job.blockCount && (
                                     <>
+                                        <TranslationPages
+                                            job={job}
+                                            scope={scope}
+                                            selected={selectedPages}
+                                            currentPage={page}
+                                            onScope={setScope}
+                                            onSelected={setSelectedPages}
+                                        />
                                         {!job.calls.length && (
                                             <>
                                                 <TextField
@@ -478,13 +500,16 @@ export function TranslationScreen() {
                                         pending ||
                                         anyRunning ||
                                         (!!job.blockCount &&
-                                            (!consent || (job.unknownCalls > 0 && !acknowledgeUnknown)))
+                                            (!consent ||
+                                                !hasSelectedWork ||
+                                                (job.unknownCalls > 0 && !acknowledgeUnknown)))
                                     }
                                     onClick={() => {
                                         void execute(async () => {
                                             setJob(
                                                 await translationApi<TranslationJob>('translate', {
                                                     id: job.id,
+                                                    ...(scope === 'selected' ? { pages: selectedPages } : {}),
                                                     consent,
                                                     acknowledgeUnknown,
                                                     model,
@@ -495,9 +520,7 @@ export function TranslationScreen() {
                                         });
                                     }}
                                 >
-                                    {job.blockCount
-                                        ? 'Kapitel übersetzen / fortsetzen'
-                                        : 'Lokale Vorbereitung fortsetzen'}
+                                    {job.blockCount ? translateLabel : 'Lokale Vorbereitung fortsetzen'}
                                 </Button>
                             </Stack>
                         </Paper>
@@ -520,10 +543,10 @@ export function TranslationScreen() {
                             </Stack>
                             <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
                                 {(
-                                    ['original', ...(job.phase === 'completed' ? ['translated'] : [])] as (
-                                        | 'original'
-                                        | 'translated'
-                                    )[]
+                                    [
+                                        'original',
+                                        ...(current.renderComplete || job.phase === 'completed' ? ['translated'] : []),
+                                    ] as ('original' | 'translated')[]
                                 ).map((kind) => (
                                     <Box key={kind} sx={{ flex: 1, minWidth: 0 }}>
                                         <Typography>{kind === 'original' ? 'Original' : 'Übersetzung'}</Typography>

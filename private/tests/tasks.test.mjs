@@ -186,3 +186,17 @@ test('Central pause requests require Basic Auth and same-origin just like cancel
     assert.equal((await fetch(url, { method: 'POST', headers, body })).status, 202);
     assert.equal(pauses, 1);
 });
+
+test('Completed page samples stay reopenable without appearing as active update blockers', async () => {
+    const f = services();
+    f.jobs[0].phase = 'partial';
+    f.jobs[0].completedPages = 3;
+    f.translations.active = async () => null;
+    const value = await f.taskService.privateTasks(request);
+    const sample = value.tasks.find((task) => task.kind === 'translation');
+    assert.equal(sample.phase, 'partial');
+    assert.equal(sample.active, false);
+    assert.equal(sample.cancellable, false);
+    assert.match(sample.detail, /3\/47/);
+    assert.match(sample.href, /settings\/translations/);
+});

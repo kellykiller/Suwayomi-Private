@@ -46,12 +46,14 @@ export function useTranslationReader(chapterId: number) {
     return {
         enabled,
         loading: enabled && result?.chapterId !== chapterId,
+        translatedPages: result?.chapterId === chapterId ? result.available?.translatedPages : undefined,
+        pageCount: result?.chapterId === chapterId ? result.available?.pageCount : undefined,
         pages: enabled && result?.chapterId === chapterId ? result.available?.pages : undefined,
         error: enabled ? result?.error : undefined,
     };
 }
 export function TranslationReaderActions({ chapterId }: { chapterId: number }) {
-    const { enabled, loading, pages, error } = useTranslationReader(chapterId);
+    const { enabled, loading, pages, error, translatedPages, pageCount } = useTranslationReader(chapterId);
     let title = 'Vorhandene deutsche Übersetzung im Reader bevorzugen';
     if (enabled) {
         title =
@@ -59,7 +61,10 @@ export function TranslationReaderActions({ chapterId }: { chapterId: number }) {
         if (loading) {
             title = 'Gespeicherte Übersetzung wird geprüft';
         } else if (pages) {
-            title = 'Deutsche Übersetzung aktiv. Zum Original wechseln.';
+            title =
+                translatedPages !== undefined && pageCount !== undefined && translatedPages < pageCount
+                    ? `${translatedPages} von ${pageCount} Seiten übersetzt; übrige Seiten im Original. Zum Original wechseln.`
+                    : 'Deutsche Übersetzung aktiv. Zum Original wechseln.';
         }
     }
     return (

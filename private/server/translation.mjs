@@ -257,7 +257,7 @@ export function createTranslationService({
             job.id,
         );
         job.phase = phase;
-        if (['paused', 'completed', 'ready'].includes(phase)) job.pauseRequested = false;
+        if (['paused', 'completed', 'partial', 'ready'].includes(phase)) job.pauseRequested = false;
         job.error = error;
         job.updated = new Date().toISOString();
         await save(job);
@@ -486,9 +486,12 @@ export function createTranslationService({
         checkPause(job);
         const data = await content(job);
         const contextPath = jobRoot(job.id) + '/context.json';
+        const selected = new Set(job.requestedPages ?? data.pages.map((page) => page.index));
+        const pending = data.pages.filter((page) => selected.has(page.index) && !page.translationComplete);
+        job.completedPages = data.pages.filter((page) => page.translationComplete).length;
         let context;
         if (await exists(contextPath)) context = await readJson(contextPath);
-        else {
+        else if (pending.some((page) => page.blocks.length)) {
             await phase(job, 'context');
             const allText = data.pages.map((page) => ({
                 page: page.index + 1,
@@ -514,7 +517,7 @@ export function createTranslationService({
         for (const page of data.pages) {
             checkPause(job);
             if (signal.aborted) throw new Error('Übersetzung abgebrochen. Bereits fertige Seiten bleiben erhalten.');
-            if (page.translationComplete) continue;
+            if (!selected.has(page.index) || page.translationComplete) continue;
             await phase(job, 'translating');
             job.currentPage = page.index + 1;
             await save(job);
@@ -567,6 +570,7 @@ export function createTranslationService({
                     );
             }
             page.translationComplete = true;
+            page.renderComplete = false;
             await writeJson(jobRoot(job.id) + '/content.json', data);
             job.completedPages = data.pages.filter((page) => page.translationComplete).length;
             await save(job);
@@ -579,7 +583,7 @@ export function createTranslationService({
         job.finished = new Date().toISOString();
         job.outputReady = true;
         checkPause(job);
-        await phase(job, 'completed');
+        await phase(job, job.completedPages === data.pages.length ? 'completed' : 'partial');
     }
     async function start(input, req) {
         await load();
@@ -629,9 +633,37 @@ export function createTranslationService({
         await checkFree();
         const job = jobs.get(input.id);
         assert(job, 'Übersetzungsauftrag fehlt.');
-        assert(['ready', 'paused'].includes(job.phase), 'Auftrag kann derzeit nicht fortgesetzt werden.');
+        assert(
+            ['ready', 'paused', 'partial', 'completed'].includes(job.phase),
+            'Auftrag kann derzeit nicht fortgesetzt werden.',
+        );
         if (!job.blockCount || !(await exists(jobRoot(job.id) + '/content.json'))) {
             launch(job, (signal) => analyze(job, credentials(req), signal));
+            return get(job.id);
+        }
+        const data = await content(job);
+        let pages = null;
+        if (input.pages !== undefined) {
+            assert(
+                Array.isArray(input.pages) &&
+                    input.pages.length > 0 &&
+                    input.pages.length <= data.pages.length &&
+                    input.pages.every((index) => Number.isInteger(index) && index >= 0 && index < data.pages.length) &&
+                    new Set(input.pages).size === input.pages.length,
+                'Bitte mindestens eine gültige Seite ohne doppelte Seitennummern auswählen.',
+            );
+            pages = [...input.pages].sort((a, b) => a - b);
+        }
+        const selected = data.pages.filter((page) => !pages || pages.includes(page.index));
+        if (selected.every((page) => page.translationComplete && (page.renderComplete || job.phase === 'completed'))) {
+            const allRendered = data.pages.every(
+                (page) => page.translationComplete && (page.renderComplete || job.phase === 'completed'),
+            );
+            job.completedPages = data.pages.filter((page) => page.translationComplete).length;
+            job.outputReady = true;
+            job.requestedPages = pages;
+            job.stopReason = '';
+            await phase(job, allRendered ? 'completed' : 'partial');
             return get(job.id);
         }
         assert(input.consent === true, 'Bitte der Übertragung von Kapiteltext und Kontextbildern an OpenAI zustimmen.');
@@ -656,6 +688,14 @@ export function createTranslationService({
             'Ein früherer API-Aufruf hat unbekannte Kosten. Bitte ausdrücklich bestätigen, bevor er möglicherweise erneut ausgeführt wird.',
         );
         job.budgetUsd = input.budgetUsd;
+        job.requestedPages = pages;
+        await logs.write(
+            'translation',
+            'INFO',
+            `Seitenauswahl: ${pages ? pages.map((index) => index + 1).join(', ') : 'gesamtes Kapitel'}; ` +
+                `${selected.filter((page) => page.translationComplete).length} fertige Seiten werden übernommen.`,
+            job.id,
+        );
         await save(job);
         launch(job, (signal) => translate(job, signal));
         return get(job.id);
@@ -665,7 +705,7 @@ export function createTranslationService({
         const job = jobs.get(input.id);
         assert(job, 'Übersetzungsauftrag fehlt.');
         assert(
-            ['ready', 'paused', 'completed'].includes(job.phase),
+            ['ready', 'paused', 'partial', 'completed'].includes(job.phase),
             'Bearbeitung ist während der Verarbeitung gesperrt.',
         );
         const data = await content(job);
@@ -704,13 +744,14 @@ export function createTranslationService({
                 block.reviewed = true;
             }
         }
+        page.renderComplete = false;
         await writeJson(jobRoot(job.id) + '/content.json', data);
-        if (job.phase === 'completed')
+        if (page.translationComplete)
             launch(job, async (signal) => {
                 await phase(job, 'rendering');
                 await imageWorker(job, 'render', signal);
                 job.revision = (job.revision || 0) + 1;
-                await phase(job, 'completed');
+                await phase(job, job.completedPages === data.pages.length ? 'completed' : 'partial');
             });
         return get(job.id);
     }
@@ -763,16 +804,19 @@ export function createTranslationService({
                                 job.chapterName === info.name)),
                 )
                 .sort((a, b) => b.updated.localeCompare(a.updated))[0];
-            return job
-                ? {
-                      id: job.id,
-                      revision: job.revision,
-                      pages: Array.from(
-                          { length: job.pageCount },
-                          (_, i) => `/private-api/translations/files/${job.id}/translated/${i}?v=${job.revision}`,
-                      ),
-                  }
-                : null;
+            if (!job) return null;
+            const data = await content(job);
+            const rendered = (page) => page.translationComplete && (page.renderComplete || job.phase === 'completed');
+            return {
+                id: job.id,
+                revision: job.revision,
+                translatedPages: data.pages.filter(rendered).length,
+                pageCount: data.pages.length,
+                pages: data.pages.map(
+                    (page) =>
+                        `/private-api/translations/files/${job.id}/${rendered(page) ? 'translated' : 'original'}/${page.index}?v=${job.revision}`,
+                ),
+            };
         },
         file: async (id, kind, index) => {
             await load();

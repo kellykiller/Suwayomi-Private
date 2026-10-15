@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 import { assert } from './common.mjs';
-const running = (job) => !['ready', 'paused', 'completed'].includes(job.phase);
+const running = (job) => !['ready', 'paused', 'partial', 'completed'].includes(job.phase);
 export function createTaskService({ translations, ai, jobReader, upstream, fetchImpl = fetch }) {
     async function privateTasks(req) {
         const tasks = [],
@@ -9,7 +9,9 @@ export function createTaskService({ translations, ai, jobReader, upstream, fetch
             (async () => {
                 const jobs = await translations.list();
                 const active = await translations.active?.();
-                const candidates = jobs.filter((job) => running(job) || ['paused', 'ready'].includes(job.phase));
+                const candidates = jobs.filter(
+                    (job) => running(job) || ['paused', 'ready', 'partial'].includes(job.phase),
+                );
                 if (active && !candidates.some((job) => job.id === active.id)) candidates.unshift(active);
                 return candidates
                     .sort(
