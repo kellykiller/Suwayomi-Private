@@ -230,6 +230,8 @@ export function createGateway({
                 }
                 const config = await configLoader();
                 if (url.pathname.startsWith('/private-api/translations/')) {
+                    if (req.method === 'GET' && url.pathname === '/private-api/translations/performance')
+                        return json(res, 200, await translations.performance());
                     if (req.method === 'GET' && url.pathname === '/private-api/translations/jobs')
                         return json(res, 200, { jobs: await translations.list() });
                     const chapterId = url.pathname.match(/^\/private-api\/translations\/chapter\/(\d+)$/)?.[1];
@@ -265,6 +267,8 @@ export function createGateway({
                             error: 'Übersetzung muss von derselben Suwayomi-Seite gestartet werden.',
                         });
                     const input = await body(req, 256 * 1024);
+                    if (url.pathname === '/private-api/translations/performance')
+                        return json(res, 200, await translations.savePerformance(input));
                     if (url.pathname === '/private-api/translations/analyze')
                         return json(res, 202, await startAiAction(() => translations.start(input, req)));
                     if (url.pathname === '/private-api/translations/translate')

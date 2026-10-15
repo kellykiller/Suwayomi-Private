@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 import * as fs from 'node:fs/promises';
 import { createLogStore } from './logs.mjs';
+import { readOcrPerformance } from './translation-performance.mjs';
 import { boundedText, dockerLogText } from './log-utils.mjs';
 import { assert, BASE, UI_CONTAINER, UI_SERVICE, imageId, inspect, writeJson, sleep } from './common.mjs';
 
@@ -42,8 +43,9 @@ export function createImageWorker({
             'Private WebUI für den Bildverarbeitungs-Worker fehlt.',
         );
         const supportsQuota = host.CpuCfsQuota === true && host.CpuCfsPeriod === true;
-        const cpuCount = Math.max(1, Math.min(2, host.NCPU || 2));
-        // DSM kernels can lack CPU CFS quotas; pin two allowed CPUs instead where available.
+        const performance = await readOcrPerformance(stateRoot);
+        const cpuCount = Math.max(1, Math.min(performance.maxCpus, host.NCPU || 2));
+        // DSM kernels can lack CPU CFS quotas; pin the configured number of allowed CPUs instead where available.
         const allowedCpus =
             current.HostConfig?.CpusetCpus || Array.from({ length: host.NCPU || 2 }, (_, i) => i).join(',');
         const cpus = [];
@@ -71,7 +73,16 @@ export function createImageWorker({
         const root = `${stateRoot}/translations/${job.id}`;
         await fs.rm(root + '/worker-result.json', { force: true });
         await fs.rm(root + '/progress.json', { force: true });
-        await writeJson(root + '/request.json', { operation, sourceLanguage: job.sourceLanguage });
+        const threads = !supportsQuota && host.CPUSet === true && cpus.length ? cpus.length : cpuCount;
+        const startedAt = new Date().toISOString();
+        const resources = {
+            profile: performance.profile,
+            cpuCount: threads,
+            memoryLimitBytes: 3 * 1024 ** 3,
+            startedAt,
+        };
+        await writeJson(root + '/resources.json', resources);
+        await writeJson(root + '/request.json', { operation, sourceLanguage: job.sourceLanguage, threads });
         let created;
         try {
             created = await api(
@@ -88,10 +99,12 @@ export function createImageWorker({
                             'TRANSFORMERS_OFFLINE=1',
                             'HF_HOME=/tmp/hf',
                             'EASYOCR_MODULE_PATH=/tmp/easyocr',
-                            'OMP_NUM_THREADS=2',
-                            'MKL_NUM_THREADS=2',
+                            `OMP_NUM_THREADS=${threads}`,
+                            `MKL_NUM_THREADS=${threads}`,
                             'PYTHONDONTWRITEBYTECODE=1',
                             'PYTHONUNBUFFERED=1',
+                            `OPENBLAS_NUM_THREADS=${threads}`,
+                            `OCR_THREADS=${threads}`,
                         ],
                         Labels: { 'io.suwayomi.private-translation': job.id },
                         HostConfig: {
@@ -118,6 +131,8 @@ export function createImageWorker({
             await logs.write('ocr', 'INFO', 'OCR-Container gestartet: ' + operation, job.id);
             const deadline = Date.now() + 60 * 60 * 1000;
             let lastProgress = '';
+            let lastSample = 0;
+            let previousCpu, previousSystem;
 
             while (!signal.aborted && Date.now() < deadline) {
                 const worker = await inspect(api, config, created.Id);
@@ -140,6 +155,27 @@ export function createImageWorker({
                     return;
                 }
                 assert(worker.State.Status === 'running', 'Bildverarbeitung wurde nicht gestartet.');
+                if (Date.now() - lastSample >= 10000) {
+                    lastSample = Date.now();
+                    try {
+                        const stats = await api(path + '/stats?stream=false&one-shot=true', { timeout: 3000 });
+                        const cpu = stats.cpu_stats?.cpu_usage?.total_usage;
+                        const system = stats.cpu_stats?.system_cpu_usage;
+                        const deltaCpu = cpu - previousCpu,
+                            deltaSystem = system - previousSystem;
+                        resources.cpuPercent =
+                            Number.isFinite(deltaCpu) && deltaCpu >= 0 && deltaSystem > 0
+                                ? (deltaCpu / deltaSystem) * (stats.cpu_stats?.online_cpus || host.NCPU || 1) * 100
+                                : null;
+                        resources.memoryUsageBytes = stats.memory_stats?.usage ?? null;
+                        resources.sampledAt = new Date().toISOString();
+                        previousCpu = cpu;
+                        previousSystem = system;
+                        await writeJson(root + '/resources.json', resources);
+                    } catch {
+                        /* Optional monitoring must not interrupt OCR on older Docker endpoints. */
+                    }
+                }
                 const progress = await fs.readFile(root + '/progress.json', 'utf8').catch(() => '');
                 if (progress && progress !== lastProgress) {
                     lastProgress = progress;

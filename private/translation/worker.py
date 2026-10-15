@@ -6,6 +6,7 @@ import os
 from pathlib import Path, PurePosixPath
 import stat
 import sys
+import time
 import zipfile
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
@@ -133,7 +134,10 @@ def analyze(root, options):
     import easyocr
     import numpy as np
     import torch
-    torch.set_num_threads(2)
+    threads = max(1, min(8, int(options.get('threads', os.environ.get('OCR_THREADS', '4')))))
+    torch.set_num_threads(threads)
+    import cv2
+    cv2.setNumThreads(threads)
     japanese = options['sourceLanguage'] == 'ja'
     reader = easyocr.Reader(['en'], gpu=False, model_storage_directory='/opt/ocr-models/easyocr',
                             user_network_directory='/tmp/easyocr-user', download_enabled=False,
@@ -145,7 +149,9 @@ def analyze(root, options):
     pages = extract(root)
     print(f'Lokales Kapitel: {len(pages)} Seiten; OCR startet.', flush=True)
     block_total = 0
+    started = time.monotonic()
     for page in pages:
+        page_started = time.monotonic()
         image = Image.open(root / 'original' / (page_name(page['index']) + '.png')).convert('RGB')
         boxes = []
         # Overlap prevents words crossing tile boundaries from disappearing on long webtoons.
@@ -194,7 +200,7 @@ def analyze(root, options):
         block_total += len(page['blocks'])
         if len(page['blocks']) > 180 or block_total > 2500:
             raise ValueError('Zu viele Textbereiche. Bitte ein kürzeres Kapitel wählen.')
-        write_json(root / 'progress.json', {'stage': 'ocr', 'completed': page['index'] + 1, 'total': len(pages)})
+        write_json(root / 'progress.json', {'stage': 'ocr', 'completed': page['index'] + 1, 'total': len(pages), 'blockCount': block_total, 'elapsedSeconds': round(time.monotonic() - started, 1), 'lastPageSeconds': round(time.monotonic() - page_started, 1)})
         print(f"OCR Seite {page['index'] + 1}/{len(pages)} abgeschlossen.", flush=True)
     return {'pages': pages, 'engine': 'CRAFT + manga-ocr 0.1.16' if japanese else 'EasyOCR 1.7.2 (CRAFT + English)',
             'warnings': ['Automatische Erkennung ist nicht fehlerfrei. OCR vor der Übersetzung prüfen.']}

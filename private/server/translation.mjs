@@ -1,4 +1,5 @@
 import { createLogStore } from './logs.mjs';
+import { readOcrPerformance, saveOcrPerformance } from './translation-performance.mjs';
 /* SPDX-License-Identifier: MPL-2.0 */
 import * as fs from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -185,8 +186,10 @@ export function createTranslationService({
         assert(job, 'Übersetzungsauftrag nicht gefunden.');
         const result = structuredClone(job);
         if (withContent && (await exists(jobRoot(id) + '/content.json'))) Object.assign(result, await content(job));
-        if (['ocr', 'rendering'].includes(job.phase))
+        if (['ocr', 'rendering', 'paused'].includes(job.phase)) {
             result.progress = await readJson(jobRoot(id) + '/progress.json').catch(() => null);
+            result.resources = await readJson(jobRoot(id) + '/resources.json').catch(() => null);
+        }
         return result;
     }
     async function chapter(chapterId, req) {
@@ -618,6 +621,13 @@ export function createTranslationService({
             }
         };
     return {
+        performance: () => readOcrPerformance(stateRoot),
+        savePerformance: exclusive(async (input) => {
+            await checkFree();
+            const result = await saveOcrPerformance(input, stateRoot);
+            await logs.write('ocr', 'INFO', `Leistungsprofil: ${result.profile}, bis zu ${result.maxCpus} CPUs.`);
+            return result;
+        }),
         start: exclusive(start),
         resume: exclusive(resume),
         edit: exclusive(edit),

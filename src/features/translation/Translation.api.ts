@@ -8,6 +8,8 @@
 
 import { AuthManager } from '@/features/authentication/AuthManager.ts';
 
+export type OcrPerformance = { profile: 'economical' | 'balanced' | 'fast'; maxCpus: number; memoryGiB: number };
+
 export type TranslationBlock = {
     id: string;
     box: number[];
@@ -41,7 +43,23 @@ export type TranslationJob = {
     revision?: number;
     engine?: string;
     warnings?: string[];
-    progress?: { completed: number; total: number };
+    resources?: {
+        profile: string;
+        cpuCount: number;
+        memoryLimitBytes: number;
+        startedAt: string;
+        sampledAt?: string;
+        cpuPercent?: number | null;
+        memoryUsageBytes?: number | null;
+    };
+    progress?: {
+        stage?: string;
+        completed: number;
+        total: number;
+        blockCount?: number;
+        elapsedSeconds?: number;
+        lastPageSeconds?: number;
+    };
     calls: {
         id: string;
         stage: string;

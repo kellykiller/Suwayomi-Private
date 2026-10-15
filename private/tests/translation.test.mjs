@@ -396,3 +396,41 @@ test('Translation routes require native authentication and enforce same-origin P
     assert.equal((await fetch(url, { method: 'POST', headers, body: '{}' })).status, 202);
     assert.equal(starts, 1);
 });
+
+test('OCR profiles default to four CPUs, persist and cannot change during an active job; live counts are separate from completed OCR', async (t) => {
+    let entered;
+    const active = new Promise((resolve) => {
+        entered = resolve;
+    });
+    const f = await fixture(t, {
+        worker: async (job, _operation, signal) => {
+            await writeJson(f.root + '/translations/' + job.id + '/progress.json', {
+                stage: 'ocr',
+                completed: 1,
+                total: 2,
+                blockCount: 7,
+                lastPageSeconds: 2,
+                elapsedSeconds: 2,
+            });
+            entered();
+            if (signal.aborted) return;
+            await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+        },
+    });
+    assert.equal((await f.service.performance()).maxCpus, 4);
+    await f.service.savePerformance({ profile: 'fast' });
+    assert.equal((await f.service.performance()).maxCpus, 8);
+    await assert.rejects(f.service.savePerformance({ profile: 'unlimited' }), /Ungültiges/);
+    const job = await start(f.service);
+    await active;
+    const running = await f.service.get(job.id);
+    assert.equal(running.blockCount, 0);
+    assert.equal(running.progress.blockCount, 7);
+    assert.equal(running.progress.completed, 1);
+    await assert.rejects(f.service.savePerformance({ profile: 'economical' }), /läuft bereits/);
+    await f.service.cancel(job.id);
+    await settled(f.service, job.id);
+    await f.service.savePerformance({ profile: 'economical' });
+    assert.equal((await f.service.performance()).maxCpus, 2);
+    assert.equal(f.modelCalls.length, 0);
+});

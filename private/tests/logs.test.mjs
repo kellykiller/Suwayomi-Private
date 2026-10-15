@@ -83,7 +83,7 @@ test('Portainer preserves a bounded Docker error explanation and removes credent
     );
 });
 test('OCR supports DSM without CFS or PIDs limits and retains failed worker output before deletion', async (t) => {
-    for (const mode of ['dsm', 'quota', 'minimal']) {
+    for (const mode of ['dsm', 'quota', 'minimal', 'fast']) {
         const root = await temp(t);
         const id = randomUUID();
         const workerId = 'c'.repeat(64);
@@ -93,9 +93,9 @@ test('OCR supports DSM without CFS or PIDs limits and retains failed worker outp
             deleted = false;
         const host = {
             MemTotal: 8 * 1024 ** 3,
-            NCPU: 8,
-            CpuCfsQuota: mode === 'quota',
-            CpuCfsPeriod: mode === 'quota',
+            NCPU: mode === 'fast' ? 3 : 8,
+            CpuCfsQuota: ['quota', 'fast'].includes(mode),
+            CpuCfsPeriod: ['quota', 'fast'].includes(mode),
             CPUSet: mode === 'dsm',
             PidsLimit: mode === 'quota',
         };
@@ -105,7 +105,7 @@ test('OCR supports DSM without CFS or PIDs limits and retains failed worker outp
             if (path.includes('/containers/suwayomi-private-ui'))
                 return {
                     Image: 'sha256:' + 'a'.repeat(64),
-                    HostConfig: { CpusetCpus: '2-5' },
+                    HostConfig: { CpusetCpus: mode === 'dsm' ? '2-5' : '' },
                     Config: {
                         Labels: {
                             'com.docker.compose.project': 'suwayomi',
@@ -135,6 +135,7 @@ test('OCR supports DSM without CFS or PIDs limits and retains failed worker outp
                 };
             throw new Error(path);
         };
+        if (mode === 'fast') await writeJson(root + '/translation-performance.json', { profile: 'fast' });
         const logs = createLogStore({ stateRoot: root, secretRoot: root + '/secrets' });
         const worker = createImageWorker({
             connection: async () => ({ api, config: { endpointId: 1 } }),
@@ -145,14 +146,19 @@ test('OCR supports DSM without CFS or PIDs limits and retains failed worker outp
             worker({ id, sourceLanguage: 'en' }, 'analyze', new AbortController().signal),
             /Bildverarbeitung fehlgeschlagen/,
         );
-        if (mode === 'quota') {
-            assert.equal(body.HostConfig.NanoCpus, 2e9);
-            assert.equal(body.HostConfig.PidsLimit, 128);
+        if (['quota', 'fast'].includes(mode)) {
+            assert.equal(body.HostConfig.NanoCpus, (mode === 'fast' ? 3 : 4) * 1e9);
+            if (mode === 'quota') assert.equal(body.HostConfig.PidsLimit, 128);
         } else {
             assert(!Object.hasOwn(body.HostConfig, 'NanoCpus'));
             assert(!Object.hasOwn(body.HostConfig, 'PidsLimit'));
         }
-        if (mode === 'dsm') assert.equal(body.HostConfig.CpusetCpus, '2,3');
+        if (mode === 'dsm') assert.equal(body.HostConfig.CpusetCpus, '2,3,4,5');
+        assert(body.Env.includes('OMP_NUM_THREADS=' + (mode === 'fast' ? 3 : 4)));
+        assert.equal(
+            JSON.parse(await fs.readFile(root + '/translations/' + id + '/request.json', 'utf8')).threads,
+            mode === 'fast' ? 3 : 4,
+        );
         assert.equal(body.HostConfig.Memory, 3 * 1024 ** 3);
         assert.equal(body.HostConfig.NetworkMode, 'none');
         assert(deleted);

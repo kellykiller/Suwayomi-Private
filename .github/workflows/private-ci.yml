@@ -37,4 +37,4 @@ jobs:
       - run: sh -n deploy/nas-install.sh
       - run: node --import tsx tools/scripts/setupEnvFiles.ts && pnpm exec vite build
       - run: docker build --build-arg PRIVATE_COMMIT=${{ github.sha }} -t suwayomi-private:ci .
-      - run: docker run --rm --network none --read-only --cap-drop=ALL --security-opt=no-new-privileges:true --memory=3g --cpus=2 --pids-limit=128 --tmpfs /tmp:rw,noexec,nosuid,size=256m -e HF_HOME=/tmp/hf -e PYTHONDONTWRITEBYTECODE=1 -e OMP_NUM_THREADS=2 -e MKL_NUM_THREADS=2 --entrypoint /opt/ocr/bin/python suwayomi-private:ci /app/private/translation/smoke.py
+      - run: docker run --rm --network none --read-only --cap-drop=ALL --security-opt=no-new-privileges:true --memory=3g --cpus=4 --pids-limit=128 --tmpfs /tmp:rw,noexec,nosuid,size=256m -e HF_HOME=/tmp/hf -e PYTHONDONTWRITEBYTECODE=1 -e OMP_NUM_THREADS=4 -e MKL_NUM_THREADS=4 -e OPENBLAS_NUM_THREADS=4 -e OCR_THREADS=4 --entrypoint /opt/ocr/bin/python suwayomi-private:ci /app/private/translation/smoke.py

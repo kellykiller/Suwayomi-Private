@@ -26,7 +26,12 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import { useAppTitle } from '@/features/navigation-bar/hooks/useAppTitle.ts';
 import { SpinnerImage } from '@/base/components/SpinnerImage.tsx';
 import { translationApi, translationImage } from '@/features/translation/Translation.api.ts';
-import type { TranslationBlock, TranslationChapter, TranslationJob } from '@/features/translation/Translation.api.ts';
+import type {
+    OcrPerformance,
+    TranslationBlock,
+    TranslationChapter,
+    TranslationJob,
+} from '@/features/translation/Translation.api.ts';
 import { AppRoutes } from '@/base/AppRoute.constants.ts';
 
 const phases: Record<string, string> = {
@@ -63,6 +68,22 @@ export function TranslationScreen() {
     const [error, setError] = useState('');
     const [connectionError, setConnectionError] = useState('');
     const [pending, setPending] = useState(false);
+    const [performance, setPerformance] = useState<OcrPerformance>();
+    const [profile, setProfile] = useState<OcrPerformance['profile']>('balanced');
+    useEffect(() => {
+        const controller = new AbortController();
+        void translationApi<OcrPerformance>('performance', undefined, controller.signal)
+            .then((value) => {
+                setPerformance(value);
+                setProfile(value.profile);
+            })
+            .catch((reason: Error) => {
+                if (!controller.signal.aborted) {
+                    setError(reason.message);
+                }
+            });
+        return () => controller.abort();
+    }, []);
     const refresh = useCallback(
         async (signal?: AbortSignal) => {
             const all = await translationApi<{ jobs: TranslationJob[] }>('jobs', undefined, signal);
@@ -159,6 +180,38 @@ export function TranslationScreen() {
                 helle Sprechblasen werden ersetzt. Schrift auf Zeichnungen, dunklen Flächen und schwierige Soundeffekte
                 bleibt bei Unsicherheit erhalten und wird als Hinweis aufgeführt.
             </Alert>
+            <Paper variant="outlined" sx={{ p: 2 }}>
+                <Stack spacing={2}>
+                    <Typography variant="h6">Lokale OCR-Leistung</Typography>
+                    <TextField
+                        select
+                        label="Leistungsprofil"
+                        value={profile}
+                        disabled={pending || anyRunning || !performance}
+                        onChange={(event) => setProfile(event.target.value as OcrPerformance['profile'])}
+                    >
+                        <MenuItem value="economical">Sparsam – bis zu 2 CPU-Kerne</MenuItem>
+                        <MenuItem value="balanced">Ausgewogen – bis zu 4 CPU-Kerne</MenuItem>
+                        <MenuItem value="fast">Schnell – bis zu 8 CPU-Kerne</MenuItem>
+                    </TextField>
+                    <Typography variant="body2">
+                        Wird auf die verfügbaren CPUs begrenzt. Container und OCR-Rechenthreads werden gemeinsam
+                        eingestellt; RAM-Limit bleibt 3 GiB. Eine Änderung gilt für den nächsten Verarbeitungslauf.
+                        Laufende Texterkennung zuerst abschließen oder abbrechen.
+                    </Typography>
+                    <Button
+                        variant="outlined"
+                        disabled={pending || anyRunning || !performance || profile === performance.profile}
+                        onClick={() => {
+                            void execute(async () => {
+                                setPerformance(await translationApi<OcrPerformance>('performance', { profile }));
+                            });
+                        }}
+                    >
+                        Leistungsprofil speichern
+                    </Button>
+                </Stack>
+            </Paper>
             {error && <Alert severity="error">{error}</Alert>}
             {connectionError && (
                 <Alert severity="warning">{connectionError} Keine KI-Anfrage wird automatisch erneut gestartet.</Alert>
@@ -234,9 +287,35 @@ export function TranslationScreen() {
                                 {job.sourceLanguage === 'ja' ? 'Japanisch' : 'Englisch'} → Deutsch
                             </Typography>
                             <Typography>
-                                {job.engine} · {job.pageCount} Seiten · {job.blockCount} Textbereiche ·{' '}
-                                {job.completedPages} Seiten übersetzt
+                                {job.engine} · {job.pageCount} Seiten ·{' '}
+                                {job.progress?.stage === 'ocr'
+                                    ? (job.progress.blockCount ?? job.blockCount)
+                                    : job.blockCount}{' '}
+                                Textbereiche · {job.completedPages} Seiten übersetzt
                             </Typography>
+                            {job.progress?.stage === 'ocr' && (
+                                <Alert severity="info">
+                                    Texterkennung: {job.progress.completed} von {job.progress.total} Seiten bearbeitet.
+                                    {job.progress.lastPageSeconds !== undefined &&
+                                        ` Letzte Seite: ${job.progress.lastPageSeconds.toFixed(1)} s.`}
+                                    {job.progress.elapsedSeconds !== undefined &&
+                                        job.progress.completed > 0 &&
+                                        ` Durchschnitt: ${(job.progress.elapsedSeconds / job.progress.completed).toFixed(1)} s/Seite (ohne Modellstart).`}{' '}
+                                    Die Übersetzung startet erst nach Abschluss und Prüfung der Texterkennung.
+                                </Alert>
+                            )}
+                            {running && job.resources && (
+                                <Typography variant="body2">
+                                    Zugewiesen: bis zu {job.resources.cpuCount} CPUs · RAM-Limit{' '}
+                                    {(job.resources.memoryLimitBytes / 1024 ** 3).toFixed(0)} GiB.
+                                    {job.resources.memoryUsageBytes != null &&
+                                        ` RAM-Nutzung: ${(job.resources.memoryUsageBytes / 1024 ** 3).toFixed(2)} GiB.`}
+                                    {job.resources.cpuPercent != null &&
+                                        ` CPU: ${job.resources.cpuPercent.toFixed(0)} % (100 % = ein Kern).`}
+                                    {job.resources.sampledAt &&
+                                        ` Messung: ${new Date(job.resources.sampledAt).toLocaleTimeString()}.`}
+                                </Typography>
+                            )}
                             {job.currentPage && running && <Typography>Aktuelle Seite: {job.currentPage}</Typography>}
                             {running && (
                                 <LinearProgress

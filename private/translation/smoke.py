@@ -4,6 +4,11 @@ import os
 os.environ['HF_HUB_OFFLINE'] = '1'
 os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ['EASYOCR_MODULE_PATH'] = '/tmp/easyocr'
+import torch
+import cv2
+threads = int(os.environ.get('OCR_THREADS', '4'))
+torch.set_num_threads(threads)
+cv2.setNumThreads(threads)
 import easyocr
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
