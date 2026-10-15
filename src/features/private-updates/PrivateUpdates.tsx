@@ -19,6 +19,10 @@ import Accordion from '@mui/material/Accordion';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { Link } from 'react-router-dom';
+import { AppRoutes } from '@/base/AppRoute.constants.ts';
+import type { TaskSummary } from '@/features/tasks/Tasks.api.ts';
+import { tasksApi } from '@/features/tasks/Tasks.api.ts';
 import { AuthManager } from '@/features/authentication/AuthManager.ts';
 import { useAppTitle } from '@/features/navigation-bar/hooks/useAppTitle.ts';
 
@@ -29,6 +33,7 @@ type Status = {
     serverRevision: number;
     configured: { github: boolean; portainer: boolean };
     busy: boolean;
+    taskBlockers?: TaskSummary[];
     canRollback: boolean;
     job: Job | null;
 };
@@ -121,6 +126,7 @@ export function PrivateUpdates() {
         failed: t`Failed`,
     };
     const busy = pending || !!status?.busy;
+    const blocked = !!status?.taskBlockers?.length;
     const changed = !!status && loadedCommit.current !== status.manifest.commit;
     const hasUpdate = !!check && check.latest.sha !== status?.manifest.commit;
 
@@ -140,6 +146,30 @@ export function PrivateUpdates() {
                     {error || connectionError}
                 </Alert>
             )}
+            <Button component={Link} to={AppRoutes.settings.children.tasks.path}>
+                Laufende Aufgaben öffnen
+            </Button>
+            {status?.taskBlockers?.map((task) => (
+                <Alert severity="warning" key={task.id}>
+                    Update wartet auf: {task.title}.
+                    <Stack direction="row" spacing={1}>
+                        <Button component={Link} to={task.href}>
+                            Vorgang öffnen
+                        </Button>
+                        <Button
+                            color="warning"
+                            disabled={pending}
+                            onClick={() => {
+                                void execute(async () => {
+                                    await tasksApi('/cancel', { kind: task.kind, id: task.id });
+                                });
+                            }}
+                        >
+                            Vorgang abbrechen
+                        </Button>
+                    </Stack>
+                </Alert>
+            ))}
             <Paper variant="outlined" sx={{ p: 2 }}>
                 <Stack spacing={1}>
                     <Typography variant="h6">Suwayomi-Private</Typography>
@@ -163,7 +193,7 @@ export function PrivateUpdates() {
                         >{t`Check for updates`}</Button>
                         <Button
                             variant="contained"
-                            disabled={busy || !hasUpdate || !check?.compatible}
+                            disabled={busy || blocked || !hasUpdate || !check?.compatible}
                             onClick={() => {
                                 void execute(async () => {
                                     await api('update', { commit: check!.latest.sha });
@@ -171,7 +201,7 @@ export function PrivateUpdates() {
                             }}
                         >{t`Install update`}</Button>
                         <Button
-                            disabled={busy || !status?.canRollback}
+                            disabled={busy || blocked || !status?.canRollback}
                             onClick={() => {
                                 void execute(async () => {
                                     await api('rollback', {});

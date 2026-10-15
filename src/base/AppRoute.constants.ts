@@ -50,6 +50,7 @@ export const AppRoutes = {
         match: 'settings',
         path: '/settings',
         children: {
+            tasks: { match: 'tasks', path: '/settings/tasks' },
             logs: { match: 'logs', path: '/settings/logs' },
             translations: {
                 match: 'translations',

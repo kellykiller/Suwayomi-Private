@@ -621,6 +621,10 @@ export function createTranslationService({
             }
         };
     return {
+        active: async () => {
+            await load();
+            return activeId ? get(activeId, false) : null;
+        },
         performance: () => readOcrPerformance(stateRoot),
         savePerformance: exclusive(async (input) => {
             await checkFree();

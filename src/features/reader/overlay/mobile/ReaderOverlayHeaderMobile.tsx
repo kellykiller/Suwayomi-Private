@@ -99,6 +99,13 @@ const BaseReaderOverlayHeaderMobile = ({ isVisible, ref }: MobileHeaderProps & {
                     <MoreVertIcon />
                 </IconButton>
                 <Menu {...bindMenu(popupState)}>
+                    <MenuItem
+                        component={RouterLink}
+                        to={AppRoutes.settings.children.tasks.path}
+                        onClick={popupState.close}
+                    >
+                        Laufende Aufgaben
+                    </MenuItem>
                     <MenuItem component={RouterLink} to={translationPath(chapterId)} onClick={popupState.close}>
                         Kapitelübersetzung
                     </MenuItem>

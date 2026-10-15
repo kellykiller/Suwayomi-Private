@@ -93,7 +93,8 @@ export function TranslationScreen() {
             } else {
                 setJob(undefined);
                 const pendingId = sessionStorage.getItem('suwayomi-translation-pending');
-                const recovered = all.jobs.find((item) => item.id === pendingId);
+                const recovered =
+                    all.jobs.find((item) => item.id === pendingId) || all.jobs.find((item) => isRunning(item.phase));
                 if (recovered) {
                     setParams({ chapter: String(recovered.chapterId), job: recovered.id });
                     sessionStorage.removeItem('suwayomi-translation-pending');
@@ -180,6 +181,9 @@ export function TranslationScreen() {
                 helle Sprechblasen werden ersetzt. Schrift auf Zeichnungen, dunklen Flächen und schwierige Soundeffekte
                 bleibt bei Unsicherheit erhalten und wird als Hinweis aufgeführt.
             </Alert>
+            <Button component={Link} to={AppRoutes.settings.children.tasks.path}>
+                Laufende Aufgaben öffnen
+            </Button>
             <Paper variant="outlined" sx={{ p: 2 }}>
                 <Stack spacing={2}>
                     <Typography variant="h6">Lokale OCR-Leistung</Typography>

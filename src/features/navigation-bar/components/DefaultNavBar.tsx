@@ -12,7 +12,10 @@ import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import ArrowBack from '@mui/icons-material/ArrowBack';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
+import PendingActionsIcon from '@mui/icons-material/PendingActions';
+import Tooltip from '@mui/material/Tooltip';
+import { AppRoutes } from '@/base/AppRoute.constants.ts';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import MenuIcon from '@mui/icons-material/Menu';
 import Stack from '@mui/material/Stack';
@@ -177,6 +180,16 @@ export function DefaultNavBar() {
                                 {title}
                             </Typography>
                         )}
+                        <Tooltip title="Laufende Aufgaben">
+                            <IconButton
+                                component={Link}
+                                to={AppRoutes.settings.children.tasks.path}
+                                aria-label="Laufende Aufgaben"
+                                color="inherit"
+                            >
+                                <PendingActionsIcon />
+                            </IconButton>
+                        </Tooltip>
                         {action}
                     </Stack>
                 </Toolbar>

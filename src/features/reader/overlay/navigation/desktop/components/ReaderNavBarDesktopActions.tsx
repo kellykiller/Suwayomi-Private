@@ -7,6 +7,9 @@
  */
 
 import Stack from '@mui/material/Stack';
+import PendingActionsIcon from '@mui/icons-material/PendingActions';
+import { Link } from 'react-router-dom';
+import { AppRoutes } from '@/base/AppRoute.constants.ts';
 import IconButton from '@mui/material/IconButton';
 import DownloadIcon from '@mui/icons-material/Download';
 import ReplayIcon from '@mui/icons-material/Replay';
@@ -93,6 +96,16 @@ export const ReaderNavBarDesktopActions = memo(() => {
             <ReaderLibraryButton />
             <ReaderBookmarkButton id={id} isBookmarked={isBookmarked} />
             <TranslationReaderActions chapterId={id} />
+            <CustomTooltip title="Laufende Aufgaben">
+                <IconButton
+                    component={Link}
+                    to={AppRoutes.settings.children.tasks.path}
+                    color="inherit"
+                    aria-label="Laufende Aufgaben"
+                >
+                    <PendingActionsIcon />
+                </IconButton>
+            </CustomTooltip>
             <CustomTooltip title={t`Retry errored pages`} disabled={!haveSomePagesFailedToLoad}>
                 <IconButton
                     onClick={() => {

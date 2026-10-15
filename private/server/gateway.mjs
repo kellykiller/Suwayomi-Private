@@ -28,6 +28,7 @@ import { activeJob, createJob, jobIdValid } from './worker.mjs';
 import { createAiService } from './ai.mjs';
 import { createTranslationService } from './translation.mjs';
 import { createImageWorker } from './translation-worker.mjs';
+import { createTaskService } from './tasks.mjs';
 import { createLogStore, LOG_CATEGORIES } from './logs.mjs';
 
 const hop = new Set([
@@ -157,6 +158,7 @@ export function createGateway({
             updateBusy: jobReader,
             imageWorker: createImageWorker({ connection, logs }),
         });
+    const tasks = createTaskService({ translations, ai, jobReader, upstream: target, fetchImpl });
     let startingAiAction = false;
     const startAiAction = async (action) => {
         assert(!startingAiAction, 'Eine KI-Aktion wird bereits vorbereitet.');
@@ -213,6 +215,16 @@ export function createGateway({
                     return json(res, 403, {
                         error: 'Die privaten Funktionen benötigen die bestehende Suwayomi-Basic-Auth-Anmeldung.',
                     });
+                if (req.method === 'GET' && url.pathname === '/private-api/tasks')
+                    return json(res, 200, await tasks.list(req));
+                if (req.method === 'POST' && url.pathname === '/private-api/tasks/cancel') {
+                    const config = await configLoader();
+                    if (!sameOrigin(req, config.origins))
+                        return json(res, 403, {
+                            error: 'Diese Aktion muss von derselben Suwayomi-Seite gestartet werden.',
+                        });
+                    return json(res, 202, await tasks.cancel(await body(req), req));
+                }
                 if (req.method === 'GET' && url.pathname === '/private-api/logs')
                     return json(res, 200, { categories: LOG_CATEGORIES });
                 if (req.method === 'GET' && url.pathname === '/private-api/logs/read') {
@@ -346,6 +358,9 @@ export function createGateway({
                         configured: { github: !!keys.github, portainer: !!keys.portainer },
                         job: running || last,
                         busy: !!running,
+                        taskBlockers: (await tasks.privateTasks(req)).tasks.filter(
+                            (task) => task.active && ['translation', 'ai'].includes(task.kind),
+                        ),
                         canRollback: !!rollback?.previousPrivateVersion,
                     });
                 }
@@ -372,6 +387,10 @@ export function createGateway({
                     assert(
                         !translations.busy(),
                         'Bitte die laufende Kapitelübersetzung zuerst abwarten oder abbrechen.',
+                    );
+                    assert(
+                        !ai.busy?.(),
+                        'Bitte die laufende KI-Suche unter Laufende Aufgaben zuerst abwarten oder abbrechen.',
                     );
                     const action = url.pathname.endsWith('/rollback') ? 'rollback' : 'update';
                     if (action === 'update') assert(sha(input.commit), 'Vollständige Commit-Kennung erforderlich.');

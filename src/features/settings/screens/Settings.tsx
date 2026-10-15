@@ -103,6 +103,12 @@ export function Settings() {
                 </ListItemIcon>
                 <ListItemText primary={t`WebUI`} />
             </ListItemLink>
+            <ListItemLink to={AppRoutes.settings.children.tasks.path}>
+                <ListItemIcon>
+                    <ReceiptLongIcon />
+                </ListItemIcon>
+                <ListItemText primary="Laufende Aufgaben" />
+            </ListItemLink>
             <ListItemLink to={AppRoutes.settings.children.privateUpdates.path}>
                 <ListItemIcon>
                     <SystemUpdateAltIcon />
