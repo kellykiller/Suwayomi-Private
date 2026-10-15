@@ -3,8 +3,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { randomUUID } from 'node:crypto';
-import { createTranslationService, validateTranslation, translationResponse } from '../server/translation.mjs';
+import { randomUUID, createHash } from 'node:crypto';
+import {
+    createTranslationService,
+    validateTranslation,
+    translationResponse,
+    TRANSLATION_INSTRUCTIONS,
+    TRANSLATION_OUTPUT_LIMITS,
+} from '../server/translation.mjs';
 import { createAiLedger } from '../server/ai-ledger.mjs';
 import { createImageWorker } from '../server/translation-worker.mjs';
 import { writeJson, readJson } from '../server/common.mjs';
@@ -739,4 +745,205 @@ test('A selected page without OCR text needs no model call; later text pages cre
     await resume(f.service, job.id);
     assert.equal((await settled(f.service, job.id)).phase, 'completed');
     assert.equal(f.modelCalls.length, 2);
+});
+
+test('Reasoning-only output exhaustion preserves billed usage and reports the exact output cap without retrying', async () => {
+    let calls = 0,
+        usage,
+        diagnostics;
+    await assert.rejects(
+        translationResponse({
+            key: 'fixture',
+            model: 'gpt-5.4-mini',
+            reasoning: 'medium',
+            prompt: '{}',
+            schema: {},
+            maxOutput: 2048,
+            observer: {
+                started: async () => {},
+                rejected: async () => {},
+                usage: async (value) => {
+                    usage = value;
+                },
+                diagnostics: async (value) => {
+                    diagnostics = value;
+                },
+            },
+            fetchImpl: async () => {
+                calls++;
+                return json({
+                    id: 'resp_reasoning_only',
+                    status: 'incomplete',
+                    incomplete_details: { reason: 'max_output_tokens' },
+                    output: [{ type: 'reasoning', summary: [] }],
+                    usage: {
+                        input_tokens: 700,
+                        output_tokens: 2048,
+                        output_tokens_details: { reasoning_tokens: 2048 },
+                    },
+                });
+            },
+        }),
+        /Antwortlimit von 2048 Tokens erreicht/,
+    );
+    assert.equal(calls, 1);
+    assert.equal(usage.usage.reasoningTokens, 2048);
+    assert.deepEqual(diagnostics, {
+        status: 'incomplete',
+        reason: 'max_output_tokens',
+        maxOutputTokens: 2048,
+        reasoning: 'medium',
+        inputTokens: 700,
+        outputTokens: 2048,
+        reasoningTokens: 2048,
+        responseId: 'resp_reasoning_only',
+    });
+});
+
+test('Content filtering and unknown provider reasons stay distinct from token limits and cannot inject raw provider text into diagnostics', async () => {
+    for (const reason of ['content_filter', 'raw-provider-secret\nAuthorization: Bearer fake']) {
+        let diagnostics;
+        const response = translationResponse({
+            key: 'fixture',
+            model: 'gpt-5.4-mini',
+            reasoning: 'low',
+            prompt: '{}',
+            schema: {},
+            observer: {
+                started: async () => {},
+                rejected: async () => {},
+                usage: async () => {},
+                diagnostics: async (value) => {
+                    diagnostics = value;
+                },
+            },
+            fetchImpl: async () =>
+                json({
+                    id: 'raw-provider-secret\nAuthorization: Bearer fake',
+                    status: 'incomplete',
+                    incomplete_details: { reason },
+                    output: [],
+                    usage: null,
+                }),
+        });
+        await assert.rejects(response, reason === 'content_filter' ? /Inhaltsfilter/ : /Grund: unknown/);
+        assert.equal(diagnostics.responseId, null);
+        assert.equal(diagnostics.reason, reason === 'content_filter' ? reason : 'unknown');
+        assert(!JSON.stringify(diagnostics).includes('raw-provider-secret'));
+    }
+});
+
+test('Translation caps account for reasoning; an incomplete context pauses once, retains costs and OCR, and only explicit resume retries', async (t) => {
+    let first = true;
+    const f = await fixture(t, {
+        model: async (body) => {
+            assert.equal(body.max_output_tokens, TRANSLATION_OUTPUT_LIMITS.medium);
+            const prompt = JSON.parse(body.input[0].content[0].text);
+            if (first) {
+                first = false;
+                return json({
+                    id: 'resp_context_limit',
+                    status: 'incomplete',
+                    incomplete_details: { reason: 'max_output_tokens' },
+                    output: [],
+                    usage: {
+                        input_tokens: 700,
+                        output_tokens: 2048,
+                        output_tokens_details: { reasoning_tokens: 2048 },
+                    },
+                });
+            }
+            return modelResponse(
+                prompt.blocks
+                    ? { blocks: prompt.blocks.map((block) => ({ id: block.id, translated: 'Hallo', note: '' })) }
+                    : { summary: 'Kapitelkontext', glossary: [] },
+            );
+        },
+    });
+    const job = await start(f.service);
+    await settled(f.service, job.id);
+    await resume(f.service, job.id);
+    const paused = await settled(f.service, job.id);
+    assert.equal(paused.phase, 'paused');
+    assert.match(paused.error, /Antwortlimit.*Reasoning/);
+    assert.equal(paused.completedPages, 0);
+    assert.equal(paused.unknownCalls, 0);
+    assert(paused.costUsd > 0);
+    assert.equal(paused.calls[0].response.reason, 'max_output_tokens');
+    assert.equal(paused.calls[0].response.reasoningTokens, 2048);
+    assert.equal(f.modelCalls.length, 1);
+    assert.deepEqual(f.workerCalls, ['analyze']);
+    const log = await fs.readFile(f.root + '/logs/translation.log', 'utf8');
+    assert.match(log, /Kapitelkontext: OpenAI-Antwort.*max_output_tokens/);
+    assert.match(log, /reasoningTokens.*2048/);
+    await resume(f.service, job.id);
+    assert.equal((await settled(f.service, job.id)).phase, 'completed');
+    assert.equal(f.modelCalls.length, 4);
+    assert.deepEqual(f.workerCalls, ['analyze', 'render']);
+    assert.equal((await f.ledger.history()).total, 4);
+});
+
+test('Valid context and page responses from legacy output caps are reused after a crash and limit update without rebilling', async (t) => {
+    const f = await fixture(t);
+    const job = await start(f.service);
+    await settled(f.service, job.id);
+    await resume(f.service, job.id);
+    const done = await settled(f.service, job.id);
+    assert.equal(f.modelCalls.length, 3);
+    await f.service.stop();
+    const root = f.root + '/translations/' + job.id;
+    for (const file of await fs.readdir(root + '/api-results')) {
+        const cached = await readJson(root + '/api-results/' + file);
+        const index = done.calls.findIndex((call) => call.id === cached.callId);
+        const body = f.modelCalls[index];
+        const stage = done.calls[index].stage;
+        const legacy = createHash('sha256')
+            .update(
+                JSON.stringify({
+                    stage,
+                    prompt: body.input[0].content[0].text,
+                    images: body.input[0].content
+                        .filter((part) => part.type === 'input_image')
+                        .map((part) => createHash('sha256').update(part.image_url.split(',')[1]).digest('hex')),
+                    schema: body.text.format.schema,
+                    maxOutput: stage === 'Kapitelkontext' ? 2048 : 6144,
+                    model: done.model,
+                    reasoning: done.reasoning,
+                    instructions: TRANSLATION_INSTRUCTIONS,
+                }),
+            )
+            .digest('hex');
+        await writeJson(root + '/api-results/' + legacy + '.json', { ...cached, fingerprint: legacy });
+        await fs.unlink(root + '/api-results/' + file);
+    }
+    await fs.unlink(root + '/context.json');
+    const data = await readJson(root + '/content.json');
+    for (const page of data.pages) {
+        page.translationComplete = false;
+        page.renderComplete = false;
+        for (const block of page.blocks) {
+            block.translated = '';
+            block.note = '';
+            block.rendered = false;
+        }
+    }
+    await writeJson(root + '/content.json', data);
+    const stored = await readJson(root + '/job.json');
+    stored.phase = 'translating';
+    stored.outputReady = false;
+    stored.completedPages = 0;
+    await writeJson(root + '/job.json', stored);
+    const next = createTranslationService({
+        upstream: 'http://127.0.0.1:18082',
+        stateRoot: f.root,
+        secretRoot: f.root + '/secrets',
+        ledger: f.ledger,
+        fetchImpl: f.fetchImpl,
+        imageWorker: f.imageWorker,
+    });
+    t.after(() => next.stop());
+    await resume(next, job.id);
+    assert.equal((await settled(next, job.id)).phase, 'completed');
+    assert.equal(f.modelCalls.length, 3);
+    assert.equal((await f.ledger.history()).total, 3);
 });

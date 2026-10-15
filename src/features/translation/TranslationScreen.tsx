@@ -666,6 +666,11 @@ export function TranslationScreen() {
                                             {money(call.balanceBeforeUsd)} / danach {money(call.balanceAfterUsd)} ·{' '}
                                             {call.usage?.inputTokens || 0} Eingabe- / {call.usage?.outputTokens || 0}{' '}
                                             Ausgabetokens
+                                            {call.usage?.reasoningTokens !== undefined &&
+                                                ` (davon ${call.usage.reasoningTokens} Reasoning)`}
+                                            {call.maxOutputTokens && ` · Antwortlimit: ${call.maxOutputTokens} Tokens`}
+                                            {call.response &&
+                                                ` · Status: ${call.response.status}${call.response.reason ? ` / ${call.response.reason}` : ''}`}
                                         </Typography>
                                     ))}
                                 </Stack>

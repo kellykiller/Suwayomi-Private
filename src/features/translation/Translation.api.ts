@@ -73,7 +73,16 @@ export type TranslationJob = {
         costUnknown: boolean;
         balanceBeforeUsd?: number;
         balanceAfterUsd?: number | null;
-        usage?: { inputTokens: number; outputTokens: number };
+        maxOutputTokens?: number;
+        response?: {
+            status: string;
+            reason: string | null;
+            maxOutputTokens: number;
+            reasoning: string;
+            reasoningTokens: number | null;
+            responseId: string | null;
+        };
+        usage?: { inputTokens: number; outputTokens: number; reasoningTokens?: number };
     }[];
     pages?: {
         index: number;
