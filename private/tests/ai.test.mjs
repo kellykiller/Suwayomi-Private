@@ -406,8 +406,13 @@ test(
     'Source time limits preserve existing verified matches and mark unfinished sources',
     { timeout: 4000 },
     async (t) => {
+        // Trigger the search deadline only after the first verified match exists.
+        // A real 90 ms wall clock can expire during ledger fsync on a loaded CI runner.
+        const deadline = new AbortController();
+        const nativeTimeout = AbortSignal.timeout;
+        t.mock.method(AbortSignal, 'timeout', (ms) => (ms === 9876 ? deadline.signal : nativeTimeout(ms)));
         const f = await fixture(t, {
-            timing: { searchTimeout: 90, requestTimeout: 1000 },
+            timing: { searchTimeout: 9876, requestTimeout: 1000 },
             source: async ({ source }, { signal }) =>
                 source === '1'
                     ? json({
@@ -421,6 +426,14 @@ test(
                     : untilAbort(signal),
         });
         const job = await f.service.start(input, request);
+        for (
+            let attempt = 0;
+            attempt < 200 && !f.service.get(job.id, request).recommendations[0]?.matches.length;
+            attempt++
+        )
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        assert.equal(f.service.get(job.id, request).recommendations[0]?.matches[0]?.id, 10);
+        deadline.abort(new DOMException('Fixture search deadline', 'TimeoutError'));
         const result = await finished(f.service, job.id);
         assert.equal(result.phase, 'partial');
         assert.deepEqual(
