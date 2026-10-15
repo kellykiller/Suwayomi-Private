@@ -25,6 +25,7 @@ import Typography from '@mui/material/Typography';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import { useAppTitle } from '@/features/navigation-bar/hooks/useAppTitle.ts';
 import { SpinnerImage } from '@/base/components/SpinnerImage.tsx';
+import { OcrPreview } from '@/features/translation/OcrPreview.tsx';
 import { translationApi, translationImage } from '@/features/translation/Translation.api.ts';
 import type {
     OcrPerformance,
@@ -64,6 +65,7 @@ export function TranslationScreen() {
     const [consent, setConsent] = useState(false);
     const [acknowledgeUnknown, setAcknowledgeUnknown] = useState(false);
     const [page, setPage] = useState(0);
+    const [previewOpen, setPreviewOpen] = useState(false);
     const [draft, setDraft] = useState<TranslationBlock[]>([]);
     const [error, setError] = useState('');
     const [connectionError, setConnectionError] = useState('');
@@ -147,6 +149,7 @@ export function TranslationScreen() {
     }, [chapterId]);
     useEffect(() => {
         setPage(0);
+        setPreviewOpen(false);
         setConsent(false);
         setAcknowledgeUnknown(false);
     }, [jobId]);
@@ -297,6 +300,11 @@ export function TranslationScreen() {
                                     : job.blockCount}{' '}
                                 Textbereiche · {job.completedPages} Seiten übersetzt
                             </Typography>
+                            {!!job.pages?.length && (
+                                <Button variant="outlined" onClick={() => setPreviewOpen(true)}>
+                                    OCR-Vorschau – erkannte Textbereiche anzeigen
+                                </Button>
+                            )}
                             {job.progress?.stage === 'ocr' && (
                                 <Alert severity="info">
                                     Texterkennung: {job.progress.completed} von {job.progress.total} Seiten bearbeitet.
@@ -643,6 +651,7 @@ export function TranslationScreen() {
                     )}
                 </>
             )}
+            {previewOpen && job && <OcrPreview key={job.id} job={job} onClose={() => setPreviewOpen(false)} />}
             <Typography variant="h6">Gespeicherte Aufträge</Typography>
             {jobs.slice(0, 30).map((item) => (
                 <Button

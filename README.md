@@ -67,6 +67,10 @@ Jede neue Suche erzeugt höchstens eine Responses-Anfrage mit strukturiertem JSO
 
 Es läuft höchstens ein KI-Suchauftrag gleichzeitig. Bis zu 100 Quellen werden mit drei parallelen Quellenabfragen durchsucht, pro Titel und Alternativname auf maximal zwei Ergebnisseiten. Quellenanfragen haben 15 Sekunden Zeit, die KI-Antwort 90 Sekunden, der gesamte Auftrag vier Minuten. Treffer erscheinen laufend und bleiben bei Abbruch oder Zeitlimit sichtbar. Ergebnisse leben 30 Minuten im Dienstspeicher; nach Dienstneustart ist eine neue Suche nötig. Bei Verbindungsabbruch startet die Oberfläche keine neue kostenpflichtige Anfrage automatisch. Schlüsseländerungen sind während eines Auftrags gesperrt. Abbruch beendet laufende Anfragen, kann bereits angefallene API-Kosten aber nicht zurücknehmen.
 
+## OCR-Vorschau (0.4.5)
+
+Nach abgeschlossener Texterkennung öffnet **OCR-Vorschau – erkannte Textbereiche anzeigen** direkt im Auftragsstatus ein eigenes Fenster. Alle Originalseiten sind über Zurück/Weiter und die Seitenauswahl erreichbar. Halbtransparente blaue Kästchen markieren die gespeicherten Textbereiche; ein Klick zeigt den erkannten Originaltext und hebt den Bereich orange hervor. Die Markierungen lassen sich ausblenden. Auch Seiten ohne erkannte Bereiche werden angezeigt. Die Vorschau nutzt vorhandene Originalbilder und OCR-Daten, verändert keine Dateien und startet weder OCR noch Übersetzung oder OpenAI-Aufrufe. Bereits vor diesem Update vollständig erkannte Kapitel können unmittelbar geprüft werden.
+
 ## Pausieren und Wiederaufnahme (0.4.4)
 
 **Verarbeitung pausieren** gibt es in der Kapitelansicht, in **Laufende Aufgaben** und für blockierende Kapitelaufträge direkt auf der Update-Seite. Die Anforderung wird angezeigt, solange die aktuelle OCR-/Render-Seite oder bereits gestartete OpenAI-Antwort noch verarbeitet und gespeichert wird. Erst danach ist der Auftrag pausiert und die Update-Sperre frei. **Sofort abbrechen** bleibt als unmittelbare Unterbrechung verfügbar; bereits gespeicherte Seiten werden auch dabei behalten. Bei einer langsamen aktuellen Seite kann das geordnete Pausieren entsprechend dauern.
