@@ -2,6 +2,7 @@
 import * as fs from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
+import { redactLog, boundedText } from './log-utils.mjs';
 
 export const BASE = '/volume3/docker/suwayomi';
 export const REPOSITORY = 'kellykiller/Suwayomi-Private';
@@ -98,7 +99,26 @@ export function portainerClient(origin, token, fetchImpl = fetch) {
             throw new Error('Portainer-Anfrage nicht erreichbar oder zeitlich überschritten.');
         }
         if (allow404 && response.status === 404) return null;
-        assert(response.ok, 'Portainer-Anfrage fehlgeschlagen (HTTP ' + response.status + ').');
+        if (!response.ok) {
+            let detail = '';
+            try {
+                const value = JSON.parse((await boundedText(response, 65536)).toString('utf8'));
+                detail =
+                    typeof value.message === 'string'
+                        ? value.message
+                        : typeof value.details === 'string'
+                          ? value.details
+                          : '';
+            } catch {}
+            const error = new Error(
+                'Portainer-Anfrage fehlgeschlagen (HTTP ' +
+                    response.status +
+                    ').' +
+                    (detail ? ' ' + redactLog(detail.slice(0, 2000), [token]) : ''),
+            );
+            error.status = response.status;
+            throw error;
+        }
         if (binary) return response;
         const text = await response.text();
         if (!text) return null;

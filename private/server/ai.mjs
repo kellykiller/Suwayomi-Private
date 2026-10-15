@@ -1,3 +1,4 @@
+import { createLogStore } from './logs.mjs';
 /* SPDX-License-Identifier: MPL-2.0 */
 import * as fs from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
@@ -181,6 +182,7 @@ export function createAiService({
     requestTimeout = 15000,
     requestDelay = 200,
     cooldown = 10000,
+    logs = createLogStore({ stateRoot, secretRoot }),
 } = {}) {
     const jobs = new Map();
     const tasks = new Set();
@@ -426,6 +428,7 @@ export function createAiService({
         return { ...result, cached: false };
     }
     async function run(job, headers, key, config, prompt, language) {
+        await logs.write('ai', 'INFO', 'KI-Suche gestartet; Modell=' + config.model, job.id);
         const deadline = AbortSignal.timeout(searchTimeout);
         const signal = AbortSignal.any([job.controller.signal, deadline]);
         try {
@@ -535,6 +538,12 @@ export function createAiService({
             for (const source of job.sources)
                 if (['pending', 'searching'].includes(source.phase)) source.phase = 'interrupted';
             job.finished = new Date().toISOString();
+            await logs.write(
+                'ai',
+                job.error ? 'ERROR' : 'INFO',
+                'KI-Suche: ' + job.phase + (job.error ? ': ' + job.error : ''),
+                job.id,
+            );
             try {
                 job.accounting = accounting(await ledger.finish(job));
             } catch {

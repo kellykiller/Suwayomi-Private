@@ -129,6 +129,7 @@ def group_boxes(boxes, japanese):
 
 
 def analyze(root, options):
+    print('OCR-Modelle laden; Quellsprache=' + options['sourceLanguage'], flush=True)
     import easyocr
     import numpy as np
     import torch
@@ -142,6 +143,7 @@ def analyze(root, options):
         from manga_ocr import MangaOcr
         mocr = MangaOcr('/opt/ocr-models/manga-ocr', force_cpu=True)
     pages = extract(root)
+    print(f'Lokales Kapitel: {len(pages)} Seiten; OCR startet.', flush=True)
     block_total = 0
     for page in pages:
         image = Image.open(root / 'original' / (page_name(page['index']) + '.png')).convert('RGB')
@@ -193,6 +195,7 @@ def analyze(root, options):
         if len(page['blocks']) > 180 or block_total > 2500:
             raise ValueError('Zu viele Textbereiche. Bitte ein kürzeres Kapitel wählen.')
         write_json(root / 'progress.json', {'stage': 'ocr', 'completed': page['index'] + 1, 'total': len(pages)})
+        print(f"OCR Seite {page['index'] + 1}/{len(pages)} abgeschlossen.", flush=True)
     return {'pages': pages, 'engine': 'CRAFT + manga-ocr 0.1.16' if japanese else 'EasyOCR 1.7.2 (CRAFT + English)',
             'warnings': ['Automatische Erkennung ist nicht fehlerfrei. OCR vor der Übersetzung prüfen.']}
 
@@ -304,6 +307,7 @@ def render(root, options):
         temporary.replace(output / name)
         page['warnings'] = warnings
         write_json(root / 'progress.json', {'stage': 'render', 'completed': page['index'] + 1, 'total': len(pages)})
+        print(f"Seite {page['index'] + 1}/{len(pages)} gesetzt.", flush=True)
     write_json(root / 'content.json', data)
     return data
 

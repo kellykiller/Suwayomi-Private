@@ -1,3 +1,4 @@
+import { createLogStore } from './logs.mjs';
 /* SPDX-License-Identifier: MPL-2.0 */
 import * as fs from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -139,6 +140,7 @@ export function createTranslationService({
     fetchImpl = fetch,
     updateBusy = async () => false,
     aiBusy = () => false,
+    logs = createLogStore({ stateRoot, secretRoot }),
 } = {}) {
     const root = stateRoot + '/translations';
     let loading;
@@ -199,12 +201,18 @@ export function createTranslationService({
                 variables: { id: chapterId },
             }),
         });
-        assert(response.ok, 'Kapitel konnte nicht geprüft werden.');
+        assert(response.ok, 'Kapitel konnte nicht geprüft werden (HTTP ' + response.status + ').');
         const value = await response.json();
         assert(!value.errors?.length && value.data?.chapter?.id === chapterId, 'Kapitelinformationen fehlen.');
         return value.data.chapter;
     }
     async function phase(job, phase, error = '') {
+        await logs.write(
+            'translation',
+            error ? 'ERROR' : 'INFO',
+            `${job.title} · ${job.chapterName} · ${phase}${error ? ': ' + error : ''}`,
+            job.id,
+        );
         job.phase = phase;
         job.error = error;
         job.updated = new Date().toISOString();
@@ -248,7 +256,7 @@ export function createTranslationService({
             response.ok,
             response.status === 404
                 ? 'Dieser Suwayomi-Server stellt keinen lokalen CBZ-Export bereit. Es wird nicht auf die Originalquelle ausgewichen.'
-                : 'Vorhandener Kapitel-Download konnte nicht exportiert werden.',
+                : 'Vorhandener Kapitel-Download konnte nicht exportiert werden (HTTP ' + response.status + ').',
         );
         const path = jobRoot(job.id) + '/input.cbz';
         const handle = await fs.open(path + '.part', 'w', 0o600);
@@ -266,6 +274,7 @@ export function createTranslationService({
         }
         assert(size > 0, 'Kapitelarchiv ist leer.');
         await fs.rename(path + '.part', path);
+        await logs.write('translation', 'INFO', 'Lokaler CBZ-Export gespeichert: ' + size + ' Bytes.', job.id);
     }
     async function analyze(job, reqHeaders, signal) {
         await download(job, reqHeaders, signal);

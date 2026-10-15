@@ -248,7 +248,19 @@ export function TranslationScreen() {
                                     }
                                 />
                             )}
-                            {job.error && <Alert severity="warning">{job.error}</Alert>}
+                            {job.error && (
+                                <Alert severity="warning">
+                                    {job.error}
+                                    <Box>
+                                        <Button component={Link} to="/settings/logs?category=ocr">
+                                            OCR-Protokoll öffnen
+                                        </Button>
+                                        <Button component={Link} to="/settings/logs?category=translation">
+                                            Übersetzungsprotokoll öffnen
+                                        </Button>
+                                    </Box>
+                                </Alert>
+                            )}
                             <Typography>
                                 Erfasste geschätzte Kosten: {money(job.costUsd)} · Kostenlimit: {money(job.budgetUsd)}
                             </Typography>
@@ -285,62 +297,76 @@ export function TranslationScreen() {
                     {['ready', 'paused'].includes(job.phase) && (
                         <Paper variant="outlined" sx={{ p: 2 }}>
                             <Stack spacing={2}>
-                                <Typography variant="h6">Übersetzung starten oder fortsetzen</Typography>
-                                <Typography color="text.secondary">
-                                    Prüfe unten den erkannten Text. Kapitelkontext und fertige Übersetzungen werden
-                                    wiederverwendet. Nach einem Abbruch kann ein bereits berechneter, aber
-                                    unvollständiger API-Aufruf erneut kostenpflichtig sein.
+                                <Typography variant="h6">
+                                    {job.blockCount
+                                        ? 'Übersetzung starten oder fortsetzen'
+                                        : 'Lokale Texterkennung fortsetzen'}
                                 </Typography>
-                                {!job.calls.length && (
+                                <Typography color="text.secondary">
+                                    {job.blockCount
+                                        ? 'Prüfe unten den erkannten Text. Kapitelkontext und fertige Übersetzungen werden wiederverwendet. Nach einem Abbruch kann ein bereits berechneter, aber unvollständiger API-Aufruf erneut kostenpflichtig sein.'
+                                        : 'Die lokale Vorbereitung wurde angehalten. Nach Behebung des Fehlers kannst du denselben Auftrag fortsetzen. Dabei wird noch keine OpenAI-Anfrage gestartet.'}
+                                </Typography>
+                                {!!job.blockCount && (
                                     <>
+                                        {!job.calls.length && (
+                                            <>
+                                                <TextField
+                                                    select
+                                                    label="Übersetzungsmodell"
+                                                    value={model}
+                                                    onChange={(event) => setModel(event.target.value)}
+                                                >
+                                                    <MenuItem value="gpt-5.4-mini">GPT-5.4 mini</MenuItem>
+                                                    <MenuItem value="gpt-5.4">GPT-5.4</MenuItem>
+                                                </TextField>
+                                                <TextField
+                                                    select
+                                                    label="Reasoning"
+                                                    value={reasoning}
+                                                    onChange={(event) => setReasoning(event.target.value)}
+                                                >
+                                                    <MenuItem value="low">Niedrig</MenuItem>
+                                                    <MenuItem value="medium">Mittel</MenuItem>
+                                                </TextField>
+                                            </>
+                                        )}
                                         <TextField
-                                            select
-                                            label="Übersetzungsmodell"
-                                            value={model}
-                                            onChange={(event) => setModel(event.target.value)}
-                                        >
-                                            <MenuItem value="gpt-5.4-mini">GPT-5.4 mini</MenuItem>
-                                            <MenuItem value="gpt-5.4">GPT-5.4</MenuItem>
-                                        </TextField>
-                                        <TextField
-                                            select
-                                            label="Reasoning"
-                                            value={reasoning}
-                                            onChange={(event) => setReasoning(event.target.value)}
-                                        >
-                                            <MenuItem value="low">Niedrig</MenuItem>
-                                            <MenuItem value="medium">Mittel</MenuItem>
-                                        </TextField>
-                                    </>
-                                )}
-                                <TextField
-                                    label="Gesamtes Kostenlimit dieses Kapitels in USD"
-                                    value={budget}
-                                    onChange={(event) => setBudget(event.target.value)}
-                                    slotProps={{ htmlInput: { inputMode: 'decimal' } }}
-                                    helperText="Vorsorgliche Prüfung vor jedem Aufruf. Keine automatische Wiederholung; unbekannte oder externe Kosten können nicht exakt begrenzt werden."
-                                />
-                                <FormControlLabel
-                                    control={<Checkbox checked={consent} onChange={(_, value) => setConsent(value)} />}
-                                    label="Kapiteltexte und Kontextbilder zur Übersetzung an OpenAI senden (kostenpflichtige API)."
-                                />
-                                {job.unknownCalls > 0 && (
-                                    <FormControlLabel
-                                        control={
-                                            <Checkbox
-                                                checked={acknowledgeUnknown}
-                                                onChange={(_, value) => setAcknowledgeUnknown(value)}
+                                            label="Gesamtes Kostenlimit dieses Kapitels in USD"
+                                            value={budget}
+                                            onChange={(event) => setBudget(event.target.value)}
+                                            slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+                                            helperText="Vorsorgliche Prüfung vor jedem Aufruf. Keine automatische Wiederholung; unbekannte oder externe Kosten können nicht exakt begrenzt werden."
+                                        />
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={consent}
+                                                    onChange={(_, value) => setConsent(value)}
+                                                />
+                                            }
+                                            label="Kapiteltexte und Kontextbilder zur Übersetzung an OpenAI senden (kostenpflichtige API)."
+                                        />
+                                        {job.unknownCalls > 0 && (
+                                            <FormControlLabel
+                                                control={
+                                                    <Checkbox
+                                                        checked={acknowledgeUnknown}
+                                                        onChange={(_, value) => setAcknowledgeUnknown(value)}
+                                                    />
+                                                }
+                                                label="Unbekannte Kosten sind geprüft; unvollständige Aufrufe dürfen gegebenenfalls erneut berechnet werden."
                                             />
-                                        }
-                                        label="Unbekannte Kosten sind geprüft; unvollständige Aufrufe dürfen gegebenenfalls erneut berechnet werden."
-                                    />
+                                        )}
+                                    </>
                                 )}
                                 <Button
                                     variant="contained"
                                     disabled={
                                         pending ||
                                         anyRunning ||
-                                        (!!job.pages && (!consent || (job.unknownCalls > 0 && !acknowledgeUnknown)))
+                                        (!!job.blockCount &&
+                                            (!consent || (job.unknownCalls > 0 && !acknowledgeUnknown)))
                                     }
                                     onClick={() => {
                                         void execute(async () => {
@@ -357,7 +383,9 @@ export function TranslationScreen() {
                                         });
                                     }}
                                 >
-                                    {job.pages ? 'Kapitel übersetzen / fortsetzen' : 'Lokale Vorbereitung fortsetzen'}
+                                    {job.blockCount
+                                        ? 'Kapitel übersetzen / fortsetzen'
+                                        : 'Lokale Vorbereitung fortsetzen'}
                                 </Button>
                             </Stack>
                         </Paper>

@@ -82,6 +82,7 @@ const { PrivateUpdates } = loadable(() => import('@/features/private-updates/Pri
 const { AiSettings } = loadable(() => import('@/features/ai-search/AiSettings.tsx'), lazyLoadFallback);
 const { AiUsage } = loadable(() => import('@/features/ai-search/AiUsage.tsx'), lazyLoadFallback);
 const { AiSearch } = loadable(() => import('@/features/ai-search/AiSearch.tsx'), lazyLoadFallback);
+const { LogsScreen } = loadable(() => import('@/features/logs/LogsScreen.tsx'), lazyLoadFallback);
 const { TranslationScreen } = loadable(() => import('@/features/translation/TranslationScreen.tsx'), lazyLoadFallback);
 const { Migration } = loadable(() => import('@/features/migration/screens/Migration.tsx'), lazyLoadFallback);
 const { DeviceSetting } = loadable(() => import('@/features/device/screens/DeviceSetting.tsx'), lazyLoadFallback);
@@ -334,6 +335,7 @@ const MainApp = () => {
                             <Route path={AppRoutes.settings.children.server.match} element={<ServerSettings />} />
                             <Route path={AppRoutes.settings.children.webui.match} element={<WebUISettings />} />
                             <Route path={AppRoutes.settings.children.ai.match} element={<AiSettings />} />
+                            <Route path={AppRoutes.settings.children.logs.match} element={<LogsScreen />} />
                             <Route path={AppRoutes.settings.children.aiUsage.match} element={<AiUsage />} />
                             <Route
                                 path={AppRoutes.settings.children.translations.match}

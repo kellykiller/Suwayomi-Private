@@ -121,6 +121,12 @@ export function Settings() {
                 </ListItemIcon>
                 <ListItemText primary={t`AI usage and balance`} />
             </ListItemLink>
+            <ListItemLink to={AppRoutes.settings.children.logs.path}>
+                <ListItemIcon>
+                    <ReceiptLongIcon />
+                </ListItemIcon>
+                <ListItemText primary="Protokolle" />
+            </ListItemLink>
             <ListItemLink to={AppRoutes.settings.children.translations.path}>
                 <ListItemIcon>
                     <TranslateIcon />

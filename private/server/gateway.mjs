@@ -28,6 +28,7 @@ import { activeJob, createJob, jobIdValid } from './worker.mjs';
 import { createAiService } from './ai.mjs';
 import { createTranslationService } from './translation.mjs';
 import { createImageWorker } from './translation-worker.mjs';
+import { createLogStore, LOG_CATEGORIES } from './logs.mjs';
 
 const hop = new Set([
     'connection',
@@ -131,28 +132,30 @@ export function createGateway({
     stateRead = readJson,
     aiService,
     translationService,
+    logService,
 } = {}) {
     const target = new URL(upstream);
     assert(
         target.protocol === 'http:' && !target.username && !target.password && target.pathname === '/',
         'Ungültiges internes Suwayomi-Ziel.',
     );
-    const ai = aiService || createAiService({ upstream: target, fetchImpl });
+    const connection = async () => {
+        const config = await configLoader();
+        const keys = await secretLoader();
+        return { config, api: portainerClient(config.portainerUrl, keys.portainer, fetchImpl) };
+    };
+    const logs = logService || createLogStore({ connection });
+    const ai = aiService || createAiService({ upstream: target, fetchImpl, logs });
     const translations =
         translationService ||
         createTranslationService({
             upstream: target,
             fetchImpl,
+            logs,
             ledger: ai.ledger,
             aiBusy: () => ai.busy?.() || false,
             updateBusy: jobReader,
-            imageWorker: createImageWorker({
-                connection: async () => {
-                    const config = await configLoader();
-                    const keys = await secretLoader();
-                    return { config, api: portainerClient(config.portainerUrl, keys.portainer, fetchImpl) };
-                },
-            }),
+            imageWorker: createImageWorker({ connection, logs }),
         });
     let startingAiAction = false;
     const startAiAction = async (action) => {
@@ -210,6 +213,21 @@ export function createGateway({
                     return json(res, 403, {
                         error: 'Die privaten Funktionen benötigen die bestehende Suwayomi-Basic-Auth-Anmeldung.',
                     });
+                if (req.method === 'GET' && url.pathname === '/private-api/logs')
+                    return json(res, 200, { categories: LOG_CATEGORIES });
+                if (req.method === 'GET' && url.pathname === '/private-api/logs/read') {
+                    const result = await logs.read(url.searchParams.get('category'));
+                    if (url.searchParams.get('download') === '1') {
+                        res.writeHead(200, {
+                            'Content-Type': 'text/plain; charset=utf-8',
+                            'Content-Disposition': `attachment; filename="suwayomi-${result.category}.log"`,
+                            'Cache-Control': 'no-store',
+                            'X-Content-Type-Options': 'nosniff',
+                        });
+                        return res.end(result.text);
+                    }
+                    return json(res, 200, result);
+                }
                 const config = await configLoader();
                 if (url.pathname.startsWith('/private-api/translations/')) {
                     if (req.method === 'GET' && url.pathname === '/private-api/translations/jobs')
@@ -413,9 +431,17 @@ export function createGateway({
                     .on('error', () => res.destroy())
                     .pipe(res);
         } catch (error) {
+            await logs.write(
+                'system',
+                'ERROR',
+                req.method + ' ' + String(req.url).split('?')[0].slice(0, 200) + ': ' + error.message,
+            );
             if (!res.headersSent) json(res, error.status === 404 ? 404 : 400, { error: error.message });
             else res.destroy();
         }
+    });
+    server.on('listening', () => {
+        void logs.write('system', 'INFO', 'Private WebUI bereit: ' + manifest.version + ' · ' + manifest.commit);
     });
     let closing;
     server.shutdownPrivate = () => {

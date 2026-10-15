@@ -67,6 +67,16 @@ Jede neue Suche erzeugt höchstens eine Responses-Anfrage mit strukturiertem JSO
 
 Es läuft höchstens ein KI-Suchauftrag gleichzeitig. Bis zu 100 Quellen werden mit drei parallelen Quellenabfragen durchsucht, pro Titel und Alternativname auf maximal zwei Ergebnisseiten. Quellenanfragen haben 15 Sekunden Zeit, die KI-Antwort 90 Sekunden, der gesamte Auftrag vier Minuten. Treffer erscheinen laufend und bleiben bei Abbruch oder Zeitlimit sichtbar. Ergebnisse leben 30 Minuten im Dienstspeicher; nach Dienstneustart ist eine neue Suche nötig. Bei Verbindungsabbruch startet die Oberfläche keine neue kostenpflichtige Anfrage automatisch. Schlüsseländerungen sind während eines Auftrags gesperrt. Abbruch beendet laufende Anfragen, kann bereits angefallene API-Kosten aber nicht zurücknehmen.
 
+## Fehlerdiagnose und Protokolle (0.4.1)
+
+**Einstellungen → Protokolle** bietet getrennte Ansichten für Kapitelübersetzung, OCR/Bildverarbeitung, KI-Suche, Private Updates, Private WebUI und Suwayomi-Server. Die aktuelle Ansicht kann als `.log` heruntergeladen, nach Text/Auftragskennung gefiltert und auf Wunsch alle zehn Sekunden aktualisiert werden. Fehler bei Kapitelübersetzungen verlinken direkt auf die passenden Protokolle.
+
+Private Ereignisse liegen dauerhaft unter `/volume3/docker/suwayomi/updater/logs/<Kategorie>.log` (root, 0600). Pro Kategorie gibt es bei 2 MiB drei rotierende Archive. Die Webansicht zeigt höchstens etwa 2 MiB, ergänzt um die letzten 50 gespeicherten Übersetzungs-/Updateaufträge; die Containeransichten fragen höchstens die letzten 500 Zeilen ab. Ein Download ist derselbe begrenzte Auszug, ohne aktiven Textfilter. Ältere vollständige Archive liegen nur im NAS-Dateisystem. Ausgaben temporärer OCR-Container werden vor deren Entfernung gesichert; laufender Seitenfortschritt wird protokolliert. Bestehende 0.4.0-Fehler werden aus den gespeicherten Aufträgen angezeigt, bereits gelöschte Worker-Ausgaben lassen sich rückwirkend nicht rekonstruieren.
+
+Zugriff und Download benötigen dieselbe geprüfte native Basic-Auth-Anmeldung wie die privaten Einstellungen. Bekannte gespeicherte API-Schlüssel sowie übliche Token-/Authorization-Muster werden ausgeblendet. Protokolle können Manga-Titel, Auftragskennungen und technische Fehlerdetails enthalten; vollständige Prompts und Kosten bleiben in der KI-Nutzungshistorie.
+
+Der OCR-Start berücksichtigt die Docker-Kernel-Fähigkeiten: CPU-CFS-Quota (`NanoCpus`) wird nur bei gemeldeter Unterstützung gesetzt. Ohne CFS werden nach Möglichkeit zwei erlaubte CPUs über `CpusetCpus` verwendet, sonst unterstützte CPU-Gewichte und die zwei Torch-Threads. Das ist ohne Cpuset/Quota kein harter Gesamt-CPU-Deckel. Das Prozesslimit wird nur mit gemeldeter PID-Cgroup-Unterstützung gesetzt; das 3-GiB-Speicherlimit und die übrige Isolation bleiben erhalten. Docker-/Portainer-Fehler zeigen nun die begrenzte, bereinigte Fehlermeldung statt lediglich HTTP 400. Ein erneuter lokaler Versuch verwendet den bestehenden Auftrag/CBZ-Export und ruft OpenAI nicht auf.
+
 ## NAS-Einrichtung
 
 Voraussetzung ist die abgeschlossene MangaFusion-Migration:
