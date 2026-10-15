@@ -434,3 +434,153 @@ test('OCR profiles default to four CPUs, persist and cannot change during an act
     assert.equal((await f.service.performance()).maxCpus, 2);
     assert.equal(f.modelCalls.length, 0);
 });
+test('Graceful pause waits for the current local page without aborting its signal and releases the update lock', async (t) => {
+    let entered,
+        release,
+        first = true,
+        workerSignal;
+    const active = new Promise((resolve) => {
+        entered = resolve;
+    });
+    const pageDone = new Promise((resolve) => {
+        release = resolve;
+    });
+    const f = await fixture(t, {
+        worker: async (_job, _operation, signal, folder) => {
+            if (first) {
+                first = false;
+                workerSignal = signal;
+                entered();
+                await pageDone;
+                const error = new Error('paused after checkpoint');
+                error.pause = true;
+                throw error;
+            }
+            await writeJson(folder + '/content.json', specimen());
+        },
+    });
+    const job = await start(f.service);
+    await active;
+    await f.service.pause(job.id);
+    assert.equal(workerSignal.aborted, false);
+    assert.equal((await f.service.get(job.id)).pauseRequested, true);
+    assert.equal(
+        await fs
+            .readFile(f.root + '/translations/' + job.id + '/pause.requested', 'utf8')
+            .then(JSON.parse)
+            .then((x) => x.requested),
+        true,
+    );
+    assert(f.service.busy());
+    release();
+    const paused = await settled(f.service, job.id);
+    assert.equal(paused.phase, 'paused');
+    assert.equal(paused.stopReason, 'user-pause');
+    assert.equal(f.service.busy(), false);
+    await resume(f.service, job.id);
+    assert.equal((await settled(f.service, job.id)).phase, 'ready');
+    assert.equal(f.modelCalls.length, 0);
+});
+test('Pausing an in-flight paid page lets its response finish, saves it and resumes without charging it again', async (t) => {
+    let pageEntered, releasePage;
+    const entered = new Promise((resolve) => {
+        pageEntered = resolve;
+    });
+    const released = new Promise((resolve) => {
+        releasePage = resolve;
+    });
+    let held = false,
+        signal;
+    const f = await fixture(t, {
+        model: async (body, input) => {
+            const prompt = JSON.parse(body.input[0].content[0].text);
+            if (!prompt.blocks) return modelResponse({ summary: 'Chapter', glossary: [] });
+            if (!held) {
+                held = true;
+                signal = input.signal;
+                pageEntered();
+                await released;
+            }
+            return modelResponse({
+                blocks: prompt.blocks.map((block) => ({ id: block.id, translated: 'Hallo!', note: '' })),
+            });
+        },
+    });
+    const job = await start(f.service);
+    await settled(f.service, job.id);
+    await resume(f.service, job.id);
+    await entered;
+    await f.service.pause(job.id);
+    assert.equal(signal.aborted, false);
+    releasePage();
+    const paused = await settled(f.service, job.id);
+    assert.equal(paused.phase, 'paused');
+    assert.equal(paused.completedPages, 1);
+    assert.equal(paused.unknownCalls, 0);
+    assert.equal(f.modelCalls.length, 2);
+    await resume(f.service, job.id);
+    assert.equal((await settled(f.service, job.id)).phase, 'completed');
+    assert.equal(f.modelCalls.length, 3);
+});
+test('Durable API responses survive loss of a later page checkpoint and restart without repeating paid calls', async (t) => {
+    const f = await fixture(t);
+    const job = await start(f.service);
+    await settled(f.service, job.id);
+    await resume(f.service, job.id);
+    await settled(f.service, job.id);
+    assert.equal(f.modelCalls.length, 3);
+    await f.service.stop();
+    const root = f.root + '/translations/' + job.id;
+    const stored = await f.service.get(job.id, false);
+    stored.phase = 'translating';
+    stored.outputReady = false;
+    stored.completedPages = 0;
+    await writeJson(root + '/job.json', stored);
+    const content = await readJson(root + '/content.json');
+    for (const page of content.pages) {
+        page.translationComplete = false;
+        for (const block of page.blocks) block.translated = '';
+    }
+    await writeJson(root + '/content.json', content);
+    await fs.rm(root + '/context.json');
+    const next = createTranslationService({
+        upstream: 'http://127.0.0.1:18082',
+        stateRoot: f.root,
+        secretRoot: f.root + '/secrets',
+        ledger: f.ledger,
+        fetchImpl: f.fetchImpl,
+        imageWorker: f.imageWorker,
+    });
+    t.after(() => next.stop());
+    assert.equal((await next.get(job.id)).phase, 'paused');
+    await resume(next, job.id);
+    assert.equal((await settled(next, job.id)).phase, 'completed');
+    assert.equal(f.modelCalls.length, 3);
+});
+test('Invalid paid page results retain their cost but cannot poison the durable response cache', async (t) => {
+    let invalid = true;
+    const f = await fixture(t, {
+        model: async (body) => {
+            const prompt = JSON.parse(body.input[0].content[0].text);
+            if (!prompt.blocks) return modelResponse({ summary: 'Chapter', glossary: [] });
+            if (invalid) {
+                invalid = false;
+                return modelResponse({ blocks: [] });
+            }
+            return modelResponse({
+                blocks: prompt.blocks.map((block) => ({ id: block.id, translated: 'Hallo!', note: '' })),
+            });
+        },
+    });
+    const job = await start(f.service);
+    await settled(f.service, job.id);
+    await resume(f.service, job.id);
+    const paused = await settled(f.service, job.id);
+    assert.equal(paused.phase, 'paused');
+    assert.match(paused.error, /nicht alle/);
+    assert.equal(f.modelCalls.length, 2);
+    assert(paused.costUsd > 0);
+    await resume(f.service, job.id);
+    assert.equal((await settled(f.service, job.id)).phase, 'completed');
+    assert.equal(f.modelCalls.length, 4);
+});

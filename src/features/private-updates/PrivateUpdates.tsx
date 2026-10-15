@@ -156,6 +156,19 @@ export function PrivateUpdates() {
                         <Button component={Link} to={task.href}>
                             Vorgang öffnen
                         </Button>
+                        {task.pausable && (
+                            <Button
+                                variant="outlined"
+                                disabled={pending || task.pauseRequested}
+                                onClick={() => {
+                                    void execute(async () => {
+                                        await tasksApi('/pause', { kind: task.kind, id: task.id });
+                                    });
+                                }}
+                            >
+                                {task.pauseRequested ? 'Pausieren angefordert …' : 'Vorgang pausieren'}
+                            </Button>
+                        )}
                         <Button
                             color="warning"
                             disabled={pending}

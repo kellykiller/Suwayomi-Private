@@ -2,9 +2,25 @@ import { createLogStore } from './logs.mjs';
 import { readOcrPerformance, saveOcrPerformance } from './translation-performance.mjs';
 /* SPDX-License-Identifier: MPL-2.0 */
 import * as fs from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
-import { assert, readJson, writeJson, exists } from './common.mjs';
+import { assert, readJson, writeJson as atomicJson, exists } from './common.mjs';
+
+// Commit each checkpoint before allowing the next expensive page or API call.
+async function syncPath(path) {
+    const file = await fs.open(path, 'r');
+    try {
+        await file.sync();
+    } finally {
+        await file.close();
+    }
+}
+async function writeJson(path, value) {
+    await atomicJson(path, value);
+    await syncPath(path);
+    await syncPath(dirname(path));
+}
+
 import { estimateCost } from './ai-ledger.mjs';
 
 export const TRANSLATION_DEFAULTS = { model: 'gpt-5.4-mini', reasoning: 'medium', budgetUsd: 0.5 };
@@ -45,6 +61,17 @@ export function validateTranslation(value, blocks) {
         );
     }
     return value.blocks;
+}
+
+function validateContext(context) {
+    assert(
+        context &&
+            typeof context.summary === 'string' &&
+            context.summary.length <= 12000 &&
+            Array.isArray(context.glossary) &&
+            context.glossary.length <= 100,
+        'Ungültiger Kapitelkontext.',
+    );
 }
 
 export async function translationResponse({
@@ -155,7 +182,18 @@ export function createTranslationService({
         assert(idValid(id), 'Ungültige Übersetzungskennung.');
         return root + '/' + id;
     };
-    const save = (job) => writeJson(jobRoot(job.id) + '/job.json', job);
+    const jobWrites = new Map();
+    const save = (job) => {
+        const snapshot = structuredClone(job);
+        const next = (jobWrites.get(job.id) || Promise.resolve()).then(() =>
+            writeJson(jobRoot(job.id) + '/job.json', snapshot),
+        );
+        jobWrites.set(
+            job.id,
+            next.catch(() => {}),
+        );
+        return next;
+    };
     const content = (job) => readJson(jobRoot(job.id) + '/content.json');
     async function load() {
         if (!loading)
@@ -167,6 +205,8 @@ export function createTranslationService({
                     if (['queued', 'downloading', 'ocr', 'context', 'translating', 'rendering'].includes(job.phase)) {
                         await imageWorker.recover?.(job);
                         job.phase = 'paused';
+                        job.pauseRequested = false;
+                        job.stopReason = 'restart';
                         job.error =
                             'Dienstneustart: Auftrag pausiert. Fertige Ergebnisse bleiben erhalten. Unvollständige KI-Aufrufe werden nicht automatisch wiederholt.';
                         await save(job);
@@ -212,11 +252,12 @@ export function createTranslationService({
     async function phase(job, phase, error = '') {
         await logs.write(
             'translation',
-            error ? 'ERROR' : 'INFO',
+            error && job.stopReason !== 'user-pause' ? 'ERROR' : 'INFO',
             `${job.title} · ${job.chapterName} · ${phase}${error ? ': ' + error : ''}`,
             job.id,
         );
         job.phase = phase;
+        if (['paused', 'completed', 'ready'].includes(phase)) job.pauseRequested = false;
         job.error = error;
         job.updated = new Date().toISOString();
         await save(job);
@@ -227,15 +268,41 @@ export function createTranslationService({
         assert(!aiBusy(), 'Bitte die laufende KI-Suche abwarten.');
         assert(!(await updateBusy()), 'Bitte das laufende private Update abwarten.');
     }
+    function checkPause(job) {
+        if (job.pauseRequested) {
+            const error = new Error(
+                'Verarbeitung an der letzten gespeicherten Seite pausiert. Mit Fortsetzen geht es dort weiter.',
+            );
+            error.pause = true;
+            throw error;
+        }
+    }
     function launch(job, run) {
         assert(!task, 'Eine Kapitelverarbeitung läuft bereits.');
+        job.pauseRequested = false;
+        job.stopReason = '';
         controller = new AbortController();
         activeId = job.id;
         task = (async () => {
             try {
+                await fs.rm(jobRoot(job.id) + '/pause.requested', { force: true });
+                if (job.pauseRequested) await writeJson(jobRoot(job.id) + '/pause.requested', { requested: true });
+                checkPause(job);
                 await run(controller.signal);
             } catch (error) {
-                await phase(job, 'paused', error.message);
+                job.stopReason =
+                    error.pause || job.pauseRequested
+                        ? 'user-pause'
+                        : controller.signal.aborted
+                          ? 'cancelled'
+                          : 'error';
+                await phase(
+                    job,
+                    'paused',
+                    error.pause || job.pauseRequested
+                        ? 'Verarbeitung an der letzten gespeicherten Seite pausiert. Mit Fortsetzen geht es dort weiter.'
+                        : error.message,
+                );
             } finally {
                 task = undefined;
                 controller = undefined;
@@ -277,11 +344,14 @@ export function createTranslationService({
         }
         assert(size > 0, 'Kapitelarchiv ist leer.');
         await fs.rename(path + '.part', path);
+        await syncPath(path);
+        await syncPath(jobRoot(job.id));
         await logs.write('translation', 'INFO', 'Lokaler CBZ-Export gespeichert: ' + size + ' Bytes.', job.id);
     }
     async function analyze(job, reqHeaders, signal) {
         await download(job, reqHeaders, signal);
         signal.throwIfAborted();
+        checkPause(job);
         if (!(await exists(jobRoot(job.id) + '/content.json'))) {
             await phase(job, 'ocr');
             await imageWorker(job, 'analyze', signal);
@@ -294,6 +364,7 @@ export function createTranslationService({
         );
         job.blockCount = data.pages.reduce((sum, page) => sum + page.blocks.length, 0);
         assert(job.blockCount > 0, 'Kein Text erkannt. Quellsprache und Originalbilder prüfen.');
+        checkPause(job);
         await phase(job, 'ready');
     }
     async function reconcile(job) {
@@ -311,8 +382,39 @@ export function createTranslationService({
         job.costUsd = Math.round(job.calls.reduce((sum, call) => sum + (call.costUsd || 0), 0) * 1e9) / 1e9;
         job.unknownCalls = job.calls.filter((call) => call.costUnknown).length;
     }
-    async function modelCall(job, stage, prompt, images, schema, maxOutput, signal) {
+    async function modelCall(job, stage, prompt, images, schema, maxOutput, signal, validateResult) {
+        checkPause(job);
         assert(prompt.length <= 200000, 'Kapiteltext ist für diesen ersten Ausbau zu umfangreich.');
+        const fingerprint = createHash('sha256')
+            .update(
+                JSON.stringify({
+                    stage,
+                    prompt,
+                    images: images.map((data) => createHash('sha256').update(data).digest('hex')),
+                    schema,
+                    maxOutput,
+                    model: job.model,
+                    reasoning: job.reasoning,
+                    instructions: TRANSLATION_INSTRUCTIONS,
+                }),
+            )
+            .digest('hex');
+        const resultPath = jobRoot(job.id) + '/api-results/' + fingerprint + '.json';
+        if (await exists(resultPath)) {
+            const cached = await readJson(resultPath);
+            assert(
+                cached.fingerprint === fingerprint && job.calls.some((call) => call.id === cached.callId),
+                'Gespeicherte KI-Antwort kann keinem Aufruf zugeordnet werden.',
+            );
+            await logs.write(
+                'translation',
+                'INFO',
+                stage + ': gespeicherte KI-Antwort übernommen, kein neuer API-Aufruf.',
+                job.id,
+            );
+            validateResult(cached.result);
+            return cached.result;
+        }
         await reconcile(job);
         const upperUsage = {
             inputTokens: 1024 + Buffer.byteLength(prompt + TRANSLATION_INSTRUCTIONS) + images.length * 3001,
@@ -346,6 +448,7 @@ export function createTranslationService({
         await ledger.begin(record, prompt, 'de', { model: job.model, reasoning: job.reasoning, resultCount: 0 });
         let success = false;
         try {
+            checkPause(job);
             const result = await translationResponse({
                 key,
                 model: job.model,
@@ -362,6 +465,9 @@ export function createTranslationService({
                     usage: (details) => ledger.providerUsage(call.id, details),
                 },
             });
+            validateResult(result);
+            await fs.mkdir(jobRoot(job.id) + '/api-results', { recursive: true, mode: 0o700 });
+            await writeJson(resultPath, { fingerprint, callId: call.id, result });
             success = true;
             return result;
         } finally {
@@ -377,6 +483,7 @@ export function createTranslationService({
         }
     }
     async function translate(job, signal) {
+        checkPause(job);
         const data = await content(job);
         const contextPath = jobRoot(job.id) + '/context.json';
         let context;
@@ -400,17 +507,12 @@ export function createTranslationService({
                 CONTEXT_SCHEMA,
                 2048,
                 signal,
-            );
-            assert(
-                typeof context.summary === 'string' &&
-                    context.summary.length <= 12000 &&
-                    Array.isArray(context.glossary) &&
-                    context.glossary.length <= 100,
-                'Ungültiger Kapitelkontext.',
+                validateContext,
             );
             await writeJson(contextPath, context);
         }
         for (const page of data.pages) {
+            checkPause(job);
             if (signal.aborted) throw new Error('Übersetzung abgebrochen. Bereits fertige Seiten bleiben erhalten.');
             if (page.translationComplete) continue;
             await phase(job, 'translating');
@@ -456,6 +558,7 @@ export function createTranslationService({
                     PAGE_SCHEMA,
                     6144,
                     signal,
+                    (value) => validateTranslation(value, page.blocks),
                 );
                 for (const item of validateTranslation(result, page.blocks))
                     Object.assign(
@@ -468,12 +571,14 @@ export function createTranslationService({
             job.completedPages = data.pages.filter((page) => page.translationComplete).length;
             await save(job);
         }
+        checkPause(job);
         await phase(job, 'rendering');
         signal.throwIfAborted();
         await imageWorker(job, 'render', signal);
         job.revision = (job.revision || 0) + 1;
         job.finished = new Date().toISOString();
         job.outputReady = true;
+        checkPause(job);
         await phase(job, 'completed');
     }
     async function start(input, req) {
@@ -678,6 +783,22 @@ export function createTranslationService({
             const real = await fs.realpath(path);
             assert(real === resolve(path) && (await fs.lstat(path)).isFile(), 'Unsicherer Bildpfad.');
             return { path, type: kind === 'preview' ? 'image/jpeg' : 'image/png' };
+        },
+        pause: async (id) => {
+            await load();
+            const job = jobs.get(id);
+            assert(job && task && activeId === id, 'Dieser Auftrag läuft nicht.');
+            job.pauseRequested = true;
+            job.updated = new Date().toISOString();
+            await save(job);
+            await writeJson(jobRoot(id) + '/pause.requested', { requested: true });
+            await logs.write(
+                'translation',
+                'INFO',
+                'Pausieren angefordert; laufende Seite oder KI-Antwort wird noch gespeichert.',
+                id,
+            );
+            return get(id, false);
         },
         cancel: async (id) => {
             const job = await get(id, false);

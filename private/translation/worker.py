@@ -12,17 +12,78 @@ import zipfile
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 Image.MAX_IMAGE_PIXELS = 40_000_000
+OCR_CHECKPOINT_VERSION = 1
 MAX_PAGES = 80
 MAX_FILE = 32 * 1024 * 1024
 MAX_TOTAL = 512 * 1024 * 1024
 FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf'
 
 
+def sync_directory(path):
+    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def write_json(path, value):
     temporary = path.with_suffix('.tmp')
-    temporary.write_text(json.dumps(value, ensure_ascii=False), encoding='utf-8')
-    temporary.chmod(0o600)
+    with temporary.open('w', encoding='utf-8') as handle:
+        os.fchmod(handle.fileno(), 0o600)
+        json.dump(value, handle, ensure_ascii=False)
+        handle.flush()
+        os.fsync(handle.fileno())
     temporary.replace(path)
+    sync_directory(path.parent)
+
+
+class PauseRequested(Exception):
+    pass
+
+
+def check_pause(root):
+    if (root / 'pause.requested').exists():
+        raise PauseRequested('Verarbeitung nach der letzten gespeicherten Seite pausiert.')
+
+
+def checkpoint_page(root, page, language):
+    folder = root / 'ocr-checkpoints'
+    folder.mkdir(exist_ok=True)
+    sync_directory(root)
+    write_json(folder / (page_name(page['index']) + '.json'),
+               {'version': OCR_CHECKPOINT_VERSION, 'language': language, 'page': page})
+
+
+def restore_page(root, page, language):
+    try:
+        path = root / 'ocr-checkpoints' / (page_name(page['index']) + '.json')
+        if path.stat().st_size > 1024 * 1024:
+            return False
+        value = json.loads(path.read_text())
+        old = value['page']
+        if value['version'] != OCR_CHECKPOINT_VERSION or value['language'] != language or any(old.get(key) != page.get(key) for key in ['index', 'sha256', 'width', 'height']):
+            return False
+        if not isinstance(old.get('blocks'), list) or len(old['blocks']) > 180:
+            return False
+        seen = set()
+        for block in old['blocks']:
+            if not isinstance(block, dict):
+                return False
+            if not isinstance(block.get('text'), str) or len(block['text']) > 1500 or block.get('id') in seen:
+                return False
+            if not isinstance(block.get('id'), str) or not block['id'].startswith(f'p{page["index"]}b'):
+                return False
+            box = block.get('box')
+            if not isinstance(box, list) or len(box) != 4 or not all(isinstance(n, (int, float)) for n in box):
+                return False
+            if not (0 <= box[0] < box[2] <= page['width'] and 0 <= box[1] < box[3] <= page['height']):
+                return False
+            seen.add(block['id'])
+        page['blocks'] = old['blocks']
+        return True
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
 
 
 def page_name(index):
@@ -130,27 +191,39 @@ def group_boxes(boxes, japanese):
 
 
 def analyze(root, options):
-    print('OCR-Modelle laden; Quellsprache=' + options['sourceLanguage'], flush=True)
-    import easyocr
-    import numpy as np
-    import torch
-    threads = max(1, min(8, int(options.get('threads', os.environ.get('OCR_THREADS', '4')))))
-    torch.set_num_threads(threads)
-    import cv2
-    cv2.setNumThreads(threads)
-    japanese = options['sourceLanguage'] == 'ja'
-    reader = easyocr.Reader(['en'], gpu=False, model_storage_directory='/opt/ocr-models/easyocr',
-                            user_network_directory='/tmp/easyocr-user', download_enabled=False,
-                            recognizer=not japanese, verbose=False)
-    mocr = None
-    if japanese:
-        from manga_ocr import MangaOcr
-        mocr = MangaOcr('/opt/ocr-models/manga-ocr', force_cpu=True)
+    check_pause(root)
     pages = extract(root)
-    print(f'Lokales Kapitel: {len(pages)} Seiten; OCR startet.', flush=True)
-    block_total = 0
+    restored = {page['index'] for page in pages if restore_page(root, page, options['sourceLanguage'])}
+    block_total = sum(len(page['blocks']) for page in pages)
+    if block_total > 2500:
+        raise ValueError('Zu viele Textbereiche.')
+    completed = len(restored)
+    started = time.monotonic()
+    write_json(root / 'progress.json', {'stage': 'ocr', 'completed': completed, 'total': len(pages), 'blockCount': block_total, 'restoredPages': len(restored)})
+    print(f'Lokales Kapitel: {len(pages)} Seiten; {len(restored)} gespeicherte OCR-Seiten übernommen.', flush=True)
+    reader, mocr = None, None
+    japanese = options['sourceLanguage'] == 'ja'
+    if len(restored) < len(pages):
+        check_pause(root)
+        print('OCR-Modelle laden; Quellsprache=' + options['sourceLanguage'], flush=True)
+        import easyocr
+        import numpy as np
+        import torch
+        threads = max(1, min(8, int(options.get('threads', os.environ.get('OCR_THREADS', '4')))))
+        torch.set_num_threads(threads)
+        import cv2
+        cv2.setNumThreads(threads)
+        reader = easyocr.Reader(['en'], gpu=False, model_storage_directory='/opt/ocr-models/easyocr',
+                                user_network_directory='/tmp/easyocr-user', download_enabled=False,
+                                recognizer=not japanese, verbose=False)
+        if japanese:
+            from manga_ocr import MangaOcr
+            mocr = MangaOcr('/opt/ocr-models/manga-ocr', force_cpu=True)
     started = time.monotonic()
     for page in pages:
+        if page['index'] in restored:
+            continue
+        check_pause(root)
         page_started = time.monotonic()
         image = Image.open(root / 'original' / (page_name(page['index']) + '.png')).convert('RGB')
         boxes = []
@@ -200,7 +273,9 @@ def analyze(root, options):
         block_total += len(page['blocks'])
         if len(page['blocks']) > 180 or block_total > 2500:
             raise ValueError('Zu viele Textbereiche. Bitte ein kürzeres Kapitel wählen.')
-        write_json(root / 'progress.json', {'stage': 'ocr', 'completed': page['index'] + 1, 'total': len(pages), 'blockCount': block_total, 'elapsedSeconds': round(time.monotonic() - started, 1), 'lastPageSeconds': round(time.monotonic() - page_started, 1)})
+        checkpoint_page(root, page, options['sourceLanguage'])
+        completed += 1
+        write_json(root / 'progress.json', {'stage': 'ocr', 'completed': completed, 'total': len(pages), 'blockCount': block_total, 'restoredPages': len(restored), 'processedThisRun': completed - len(restored), 'elapsedSeconds': round(time.monotonic() - started, 1), 'lastPageSeconds': round(time.monotonic() - page_started, 1)})
         print(f"OCR Seite {page['index'] + 1}/{len(pages)} abgeschlossen.", flush=True)
     return {'pages': pages, 'engine': 'CRAFT + manga-ocr 0.1.16' if japanese else 'EasyOCR 1.7.2 (CRAFT + English)',
             'warnings': ['Automatische Erkennung ist nicht fehlerfrei. OCR vor der Übersetzung prüfen.']}
@@ -300,21 +375,49 @@ def render_page(image, page, font_path=FONT):
 def render(root, options):
     output = root / 'translated'
     output.mkdir(exist_ok=True)
+    checkpoints = root / 'render-checkpoints'
+    checkpoints.mkdir(exist_ok=True)
+    sync_directory(root)
     data = json.loads((root / 'content.json').read_text())
     pages = data['pages']
     for page in pages:
         if options.get('page') is not None and page['index'] != options['page']:
             continue
+        check_pause(root)
         name = page_name(page['index']) + '.png'
-        image, warnings = render_page(Image.open(root / 'original' / name), page)
-        temporary = output / (name + '.tmp')
-        image.save(temporary, format='PNG')
-        temporary.chmod(0o600)
-        temporary.replace(output / name)
-        page['warnings'] = warnings
+        original = root / 'original' / name
+        signature = hashlib.sha256(json.dumps({
+            'version': 1, 'original': hashlib.sha256(original.read_bytes()).hexdigest(),
+            'blocks': [{key: value for key, value in block.items() if key != 'rendered'} for block in page['blocks']],
+        }, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        checkpoint = checkpoints / (page_name(page['index']) + '.json')
+        cached = None
+        try:
+            value = json.loads(checkpoint.read_text())
+            if value['signature'] == signature and hashlib.sha256((output / name).read_bytes()).hexdigest() == value['outputHash']:
+                cached = value['page']
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        if cached:
+            for block, old in zip(page['blocks'], cached['blocks']):
+                block['rendered'] = old.get('rendered', False)
+            page['warnings'] = cached.get('warnings', [])
+            print(f"Gesetzte Seite {page['index'] + 1} übernommen.", flush=True)
+        else:
+            image, warnings = render_page(Image.open(original), page)
+            temporary = output / (name + '.tmp')
+            with temporary.open('wb') as handle:
+                os.fchmod(handle.fileno(), 0o600)
+                image.save(handle, format='PNG')
+                handle.flush()
+                os.fsync(handle.fileno())
+            temporary.replace(output / name)
+            sync_directory(output)
+            page['warnings'] = warnings
+            write_json(checkpoint, {'signature': signature, 'outputHash': hashlib.sha256((output / name).read_bytes()).hexdigest(), 'page': page})
+        write_json(root / 'content.json', data)
         write_json(root / 'progress.json', {'stage': 'render', 'completed': page['index'] + 1, 'total': len(pages)})
         print(f"Seite {page['index'] + 1}/{len(pages)} gesetzt.", flush=True)
-    write_json(root / 'content.json', data)
     return data
 
 
@@ -331,6 +434,8 @@ def main():
         else:
             raise ValueError('Unbekannte Bildverarbeitung.')
         write_json(root / 'worker-result.json', {'ok': True})
+    except PauseRequested:
+        write_json(root / 'worker-result.json', {'ok': True, 'paused': True})
     except Exception as error:
         # Exception bodies must not include credentials (this worker never receives any).
         write_json(root / 'worker-result.json', {'ok': False, 'error': str(error)[:800]})

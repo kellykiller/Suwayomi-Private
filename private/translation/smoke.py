@@ -24,3 +24,42 @@ assert 'HELLO' in result.upper() and 'FRIEND' in result.upper(), result
 # MangaOcr initialization reads its packaged example and exercises the Japanese model.
 MangaOcr('/opt/ocr-models/manga-ocr', force_cpu=True)
 print('Offline CPU smoke test passed: English detection + OCR, Japanese manga-ocr model.')
+
+# Exercise the actual CPU OCR/checkpoint/pause/resume pipeline under worker isolation.
+import gc
+import io
+import json
+from pathlib import Path
+import tempfile
+import zipfile
+import worker
+
+del reader
+gc.collect()
+with tempfile.TemporaryDirectory(prefix='ocr-resume-') as folder:
+    root = Path(folder)
+    buffer = io.BytesIO()
+    image.save(buffer, format='PNG')
+    with zipfile.ZipFile(root / 'input.cbz', 'w') as archive:
+        archive.writestr('001.png', buffer.getvalue())
+        archive.writestr('002.png', buffer.getvalue())
+    original_checkpoint = worker.checkpoint_page
+    def checkpoint_and_pause(target, page, language):
+        original_checkpoint(target, page, language)
+        if page['index'] == 0:
+            (target / 'pause.requested').write_text('pause')
+    worker.checkpoint_page = checkpoint_and_pause
+    try:
+        worker.analyze(root, {'sourceLanguage': 'en', 'threads': threads})
+        raise AssertionError('Worker did not pause between pages')
+    except worker.PauseRequested:
+        assert (root / 'ocr-checkpoints/0000.json').exists()
+        assert not (root / 'ocr-checkpoints/0001.json').exists()
+    finally:
+        worker.checkpoint_page = original_checkpoint
+    (root / 'pause.requested').unlink()
+    resumed = worker.analyze(root, {'sourceLanguage': 'en', 'threads': threads})
+    progress = json.loads((root / 'progress.json').read_text())
+    assert progress['restoredPages'] == 1 and progress['completed'] == 2
+    assert 'HELLO' in ' '.join(block['text'] for block in resumed['pages'][0]['blocks']).upper()
+    print('Actual offline OCR pause/resume smoke test passed: saved first page reused.')

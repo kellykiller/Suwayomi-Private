@@ -18,6 +18,8 @@ export function createTaskService({ translations, ai, jobReader, upstream, fetch
                     .slice(0, 50)
                     .map((job) => ({
                         kind: 'translation',
+                        pausable: true,
+                        pauseRequested: !!(job.id === active?.id ? active.pauseRequested : job.pauseRequested),
                         id: job.id,
                         title: `${job.title} – ${job.chapterName}`,
                         phase: job.id === active?.id ? active.phase : job.phase,
@@ -138,5 +140,13 @@ export function createTaskService({ translations, ai, jobReader, upstream, fetch
         else await ai.cancel(input.id, req);
         return { requested: true };
     }
-    return { list, privateTasks, cancel };
+    async function pause(input) {
+        assert(
+            input?.kind === 'translation' && typeof input.id === 'string' && /^[a-f0-9-]{36}$/.test(input.id),
+            'Nur Kapitelverarbeitung kann hier pausiert werden.',
+        );
+        await translations.pause(input.id);
+        return { requested: true };
+    }
+    return { list, privateTasks, cancel, pause };
 }

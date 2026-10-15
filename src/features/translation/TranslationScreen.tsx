@@ -303,9 +303,11 @@ export function TranslationScreen() {
                                     {job.progress.lastPageSeconds !== undefined &&
                                         ` Letzte Seite: ${job.progress.lastPageSeconds.toFixed(1)} s.`}
                                     {job.progress.elapsedSeconds !== undefined &&
-                                        job.progress.completed > 0 &&
-                                        ` Durchschnitt: ${(job.progress.elapsedSeconds / job.progress.completed).toFixed(1)} s/Seite (ohne Modellstart).`}{' '}
+                                        (job.progress.processedThisRun ?? job.progress.completed) > 0 &&
+                                        ` Durchschnitt: ${(job.progress.elapsedSeconds / (job.progress.processedThisRun ?? job.progress.completed)).toFixed(1)} s/Seite (ohne Modellstart).`}{' '}
                                     Die Übersetzung startet erst nach Abschluss und Prüfung der Texterkennung.
+                                    {!!job.progress.restoredPages &&
+                                        ` ${job.progress.restoredPages} Seiten aus dem Zwischenspeicher übernommen.`}
                                 </Alert>
                             )}
                             {running && job.resources && (
@@ -331,6 +333,12 @@ export function TranslationScreen() {
                                     }
                                 />
                             )}
+                            {job.pauseRequested && (
+                                <Alert severity="info">
+                                    Pausieren angefordert. Die laufende Seite oder KI-Antwort wird noch fertig
+                                    gespeichert. Danach kann das Update gestartet werden.
+                                </Alert>
+                            )}
                             {job.error && (
                                 <Alert severity="warning">
                                     {job.error}
@@ -355,6 +363,19 @@ export function TranslationScreen() {
                             )}
                             {running && (
                                 <Button
+                                    variant="outlined"
+                                    disabled={pending || job.pauseRequested}
+                                    onClick={() => {
+                                        void execute(async () => {
+                                            setJob(await translationApi<TranslationJob>('pause', { id: job.id }));
+                                        });
+                                    }}
+                                >
+                                    {job.pauseRequested ? 'Pausieren angefordert …' : 'Verarbeitung pausieren'}
+                                </Button>
+                            )}
+                            {running && (
+                                <Button
                                     color="warning"
                                     disabled={pending}
                                     onClick={() => {
@@ -363,7 +384,7 @@ export function TranslationScreen() {
                                         });
                                     }}
                                 >
-                                    Verarbeitung abbrechen
+                                    Verarbeitung sofort abbrechen
                                 </Button>
                             )}
                             {job.phase === 'completed' && (
@@ -388,7 +409,7 @@ export function TranslationScreen() {
                                 <Typography color="text.secondary">
                                     {job.blockCount
                                         ? 'Prüfe unten den erkannten Text. Kapitelkontext und fertige Übersetzungen werden wiederverwendet. Nach einem Abbruch kann ein bereits berechneter, aber unvollständiger API-Aufruf erneut kostenpflichtig sein.'
-                                        : 'Die lokale Vorbereitung wurde angehalten. Nach Behebung des Fehlers kannst du denselben Auftrag fortsetzen. Dabei wird noch keine OpenAI-Anfrage gestartet.'}
+                                        : 'Die lokale Vorbereitung wurde angehalten. Fortsetzen verwendet die gespeicherten OCR-Seiten und beginnt bei der nächsten fehlenden Seite. Dabei wird noch keine OpenAI-Anfrage gestartet.'}
                                 </Typography>
                                 {!!job.blockCount && (
                                     <>

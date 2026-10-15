@@ -129,7 +129,7 @@ export function createImageWorker({
         try {
             await api(path + '/start', { method: 'POST' });
             await logs.write('ocr', 'INFO', 'OCR-Container gestartet: ' + operation, job.id);
-            const deadline = Date.now() + 60 * 60 * 1000;
+            const deadline = Date.now() + 4 * 60 * 60 * 1000;
             let lastProgress = '';
             let lastSample = 0;
             let previousCpu, previousSystem;
@@ -152,6 +152,11 @@ export function createImageWorker({
                                 ? 'OCR-Arbeitsspeicherlimit erreicht.'
                                 : 'Bildverarbeitung fehlgeschlagen.'),
                     );
+                    if (result.paused) {
+                        const error = new Error('Bildverarbeitung an der letzten gespeicherten Seite pausiert.');
+                        error.pause = true;
+                        throw error;
+                    }
                     return;
                 }
                 assert(worker.State.Status === 'running', 'Bildverarbeitung wurde nicht gestartet.');
@@ -187,7 +192,7 @@ export function createImageWorker({
                 signal.aborted ? 'Bildverarbeitung abgebrochen.' : 'Bildverarbeitung hat das Zeitlimit erreicht.',
             );
         } catch (error) {
-            await logs.write('ocr', 'ERROR', operation + ': ' + error.message, job.id);
+            await logs.write('ocr', error.pause ? 'INFO' : 'ERROR', operation + ': ' + error.message, job.id);
             throw error;
         } finally {
             // Only remove our exact, labelled helper, never any existing Suwayomi container.

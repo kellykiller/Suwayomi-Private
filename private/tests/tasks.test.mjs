@@ -136,3 +136,53 @@ test('Task cancellation requires native Basic Auth and same-origin headers befor
     assert.equal((await fetch(url, { method: 'POST', headers, body })).status, 202);
     assert.equal(cancels, 1);
 });
+test('Pause routes target chapter processing only and expose the pending request in task status', async () => {
+    const f = services();
+    let paused = false;
+    f.translations.pause = async (value) => {
+        assert.equal(value, id);
+        paused = true;
+    };
+    await f.taskService.pause({ kind: 'translation', id });
+    assert(paused);
+    await assert.rejects(f.taskService.pause({ kind: 'ai', id }), /Nur Kapitel/);
+    assert.equal((await f.taskService.list(request)).tasks[0].pausable, true);
+});
+test('Central pause requests require Basic Auth and same-origin just like cancellation', async (t) => {
+    let pauses = 0;
+    const gateway = createGateway({
+        upstream: 'http://127.0.0.1:18082',
+        manifest: {},
+        configLoader: async () => ({ origins: ['https://reader.example'] }),
+        fetchImpl: async (_url, input) =>
+            input.headers.Authorization
+                ? Response.json({
+                      data: { settings: { authMode: 'BASIC_AUTH' }, aboutServer: { version: 'v2.4.2366' } },
+                  })
+                : new Response('', { status: 401 }),
+        aiService: { stop: async () => {} },
+        translationService: {
+            pause: async (value) => {
+                assert.equal(value, id);
+                pauses++;
+            },
+            stop: async () => {},
+        },
+    });
+    await new Promise((resolve) => gateway.listen(0, '127.0.0.1', resolve));
+    t.after(() => new Promise((resolve) => gateway.close(resolve)));
+    const url = `http://127.0.0.1:${gateway.address().port}/private-api/tasks/pause`;
+    assert.equal((await fetch(url, { method: 'POST' })).status, 401);
+    const headers = {
+        Authorization: request.headers.authorization,
+        'Content-Type': 'application/json',
+        Origin: 'https://evil.example',
+        'X-Suwayomi-Private': '1',
+    };
+    const body = JSON.stringify({ kind: 'translation', id });
+    assert.equal((await fetch(url, { method: 'POST', headers, body })).status, 403);
+    assert.equal(pauses, 0);
+    headers.Origin = 'https://reader.example';
+    assert.equal((await fetch(url, { method: 'POST', headers, body })).status, 202);
+    assert.equal(pauses, 1);
+});

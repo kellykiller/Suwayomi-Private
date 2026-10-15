@@ -217,13 +217,22 @@ export function createGateway({
                     });
                 if (req.method === 'GET' && url.pathname === '/private-api/tasks')
                     return json(res, 200, await tasks.list(req));
-                if (req.method === 'POST' && url.pathname === '/private-api/tasks/cancel') {
+                if (
+                    req.method === 'POST' &&
+                    ['/private-api/tasks/cancel', '/private-api/tasks/pause'].includes(url.pathname)
+                ) {
                     const config = await configLoader();
                     if (!sameOrigin(req, config.origins))
                         return json(res, 403, {
                             error: 'Diese Aktion muss von derselben Suwayomi-Seite gestartet werden.',
                         });
-                    return json(res, 202, await tasks.cancel(await body(req), req));
+                    return json(
+                        res,
+                        202,
+                        await (url.pathname.endsWith('/pause')
+                            ? tasks.pause(await body(req), req)
+                            : tasks.cancel(await body(req), req)),
+                    );
                 }
                 if (req.method === 'GET' && url.pathname === '/private-api/logs')
                     return json(res, 200, { categories: LOG_CATEGORIES });
@@ -287,6 +296,8 @@ export function createGateway({
                         return json(res, 202, await startAiAction(() => translations.resume(input, req)));
                     if (url.pathname === '/private-api/translations/edit')
                         return json(res, 202, await translations.edit(input));
+                    if (url.pathname === '/private-api/translations/pause')
+                        return json(res, 202, await translations.pause(input.id));
                     if (url.pathname === '/private-api/translations/cancel')
                         return json(res, 200, await translations.cancel(input.id));
                     return json(res, 404, { error: 'Unbekannte Übersetzungsaktion.' });

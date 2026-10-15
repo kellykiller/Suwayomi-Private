@@ -67,6 +67,20 @@ Jede neue Suche erzeugt höchstens eine Responses-Anfrage mit strukturiertem JSO
 
 Es läuft höchstens ein KI-Suchauftrag gleichzeitig. Bis zu 100 Quellen werden mit drei parallelen Quellenabfragen durchsucht, pro Titel und Alternativname auf maximal zwei Ergebnisseiten. Quellenanfragen haben 15 Sekunden Zeit, die KI-Antwort 90 Sekunden, der gesamte Auftrag vier Minuten. Treffer erscheinen laufend und bleiben bei Abbruch oder Zeitlimit sichtbar. Ergebnisse leben 30 Minuten im Dienstspeicher; nach Dienstneustart ist eine neue Suche nötig. Bei Verbindungsabbruch startet die Oberfläche keine neue kostenpflichtige Anfrage automatisch. Schlüsseländerungen sind während eines Auftrags gesperrt. Abbruch beendet laufende Anfragen, kann bereits angefallene API-Kosten aber nicht zurücknehmen.
 
+## Pausieren und Wiederaufnahme (0.4.4)
+
+**Verarbeitung pausieren** gibt es in der Kapitelansicht, in **Laufende Aufgaben** und für blockierende Kapitelaufträge direkt auf der Update-Seite. Die Anforderung wird angezeigt, solange die aktuelle OCR-/Render-Seite oder bereits gestartete OpenAI-Antwort noch verarbeitet und gespeichert wird. Erst danach ist der Auftrag pausiert und die Update-Sperre frei. **Sofort abbrechen** bleibt als unmittelbare Unterbrechung verfügbar; bereits gespeicherte Seiten werden auch dabei behalten. Bei einer langsamen aktuellen Seite kann das geordnete Pausieren entsprechend dauern.
+
+OCR-Ergebnisse werden atomar nach jeder Seite unter `translations/<Auftrag>/ocr-checkpoints/` gespeichert und vor der nächsten Seite mit `fsync` gesichert. Bei Wiederaufnahme werden passende Seiten anhand Bild-Prüfsumme, Seitennummer, Abmessungen, Quellsprache und Checkpoint-Version übernommen. Fehlende, beschädigte oder nicht passende Einträge werden lokal neu erkannt. Das Archiv wird erneut geprüft und die Arbeitsbilder werden vorbereitet; die OCR der fertigen Seiten entfällt. Sind alle Seiten bereits gespeichert, müssen dafür auch keine OCR-Modelle geladen werden. Modell-/Algorithmusänderungen, die bestehende OCR-Ergebnisse ungültig machen, müssen die interne Checkpoint-Version erhöhen.
+
+Fertig übersetzte Seiten und der Kapitelkontext bleiben wie bisher erhalten. Zusätzlich liegen validierte OpenAI-Antworten unter `api-results/`, gebunden an Modell, Reasoning, Prompt, Bilder, Schema und Auftragsaufruf. Ein Neustart zwischen erhaltener Antwort und dem späteren Seiten-Checkpoint führt damit nicht automatisch zu einem erneuten kostenpflichtigen Aufruf. Unvollständige oder ungültige Antworten werden nicht als erfolgreiche Ergebnisse wiederverwendet. Bei einer unterbrochenen Netzwerkverbindung können weiterhin unbekannte Provider-Kosten entstehen; vor möglicher Wiederholung ist die bestehende ausdrückliche Bestätigung nötig.
+
+Die Bildaufbereitung verwendet ebenfalls Seiten-Checkpoints (`render-checkpoints/`): unveränderte, fertig gesetzte Seiten werden nach Prüfung von Eingaben und Ausgabedatei übersprungen. Textkorrekturen oder beschädigte Ausgaben veranlassen die betroffene Seite erneut. Der lokale Worker hat bis zu vier Stunden Laufzeit; Pause und sofortiger Abbruch bleiben verfügbar.
+
+Nach einem Dienst-/NAS-Neustart bleiben unterbrochene Aufträge angehalten. **Öffnen / fortsetzen** führt zur Kapitelansicht; dort setzt **Lokale Vorbereitung fortsetzen** beziehungsweise **Kapitel übersetzen / fortsetzen** den bestehenden Auftrag fort. Ein Neustart allein startet keine kostenpflichtigen API-Aufrufe.
+
+**Grenze beim ersten Update von 0.4.3 oder älter:** Noch laufende, unvollständige OCR besitzt keine seitenweisen Text-Checkpoints. Diese zuvor nicht gespeicherten Ergebnisse können nicht nachträglich wiederhergestellt werden. Bereits vollständig gespeicherte OCR und Übersetzungen bleiben erhalten. Neue oder fortgesetzte OCR-Läufe ab 0.4.4 sichern jede fertig erkannte Seite.
+
 ## Laufende Aufgaben (0.4.3)
 
 **Einstellungen → Laufende Aufgaben** beziehungsweise das Aufgaben-Symbol in der oberen Leiste öffnet die zentrale Übersicht unabhängig vom ursprünglichen Fenster oder Tab. Im mobilen Reader liegt der Zugang im Drei-Punkte-Menü. Kapitelverarbeitung (einschließlich OCR, Übersetzung und Bildaufbereitung), KI-Suche des angemeldeten Benutzers und Private Updates werden angezeigt. Die native Downloadwarteschlange und laufende Bibliotheksaktualisierungen werden zusätzlich über ausschließlich lesende GraphQL-Abfragen eingeblendet. Ein fehlender Teilstatus verdeckt andere laufende Aufgaben nicht. Angehaltene und zur Prüfung bereite Kapitelaufträge bleiben wieder erreichbar; es werden bis zu 50 relevante Kapitelaufträge angezeigt, aktive zuerst.
@@ -75,7 +89,7 @@ OCR- und KI-Aufträge lassen sich direkt abbrechen oder über ihre Detailansicht
 
 Die Update-Seite nennt blockierende Kapitel-/KI-Aufträge mit **Vorgang öffnen** und **Vorgang abbrechen**. Updates bleiben bis zum Ende der laufenden Verarbeitung gesperrt; die Sperre wird nicht umgangen. Beim erneuten Öffnen der Kapitelübersetzung ohne Auftragskennung wird ein aktiver Auftrag automatisch wieder ausgewählt. Die bestehenden Auftragsspeicher und Abbruch-Controller bleiben maßgeblich, keine zweite Aufgabenwarteschlange wird eingeführt. Die neuen Verwaltungsendpunkte verlangen geprüfte native Basic Auth und für Abbruch zusätzlich Same-Origin und den privaten CSRF-Header.
 
-**Bereits installierte Versionen 0.4.0–0.4.2:** Zum Auflösen einer Update-Sperre `/settings/translations` öffnen, unten unter **Gespeicherte Aufträge** den laufenden Auftrag auswählen und **Verarbeitung abbrechen** betätigen. Fertige Ergebnisse bleiben erhalten; unvollständige lokale OCR muss wiederholt werden.
+**Bereits installierte Versionen 0.4.0–0.4.2:** Zum Auflösen einer Update-Sperre `/settings/translations` öffnen, unten unter **Gespeicherte Aufträge** den laufenden Auftrag auswählen und **Verarbeitung abbrechen** betätigen. Fertige Ergebnisse bleiben erhalten; in diesen älteren Versionen muss unvollständige lokale OCR wiederholt werden.
 
 ## Lokale OCR-Leistung und Fortschritt (0.4.2)
 
@@ -83,7 +97,7 @@ Unter **Einstellungen → Kapitelübersetzung → Lokale OCR-Leistung** stehen d
 
 Die Anzeige unterscheidet lokale OCR-Seiten von übersetzten Seiten. Nach jeder erkannten Seite werden die bisherige Textanzahl, die Dauer dieser Seite und die durchschnittliche OCR-Zeit pro Seite aktualisiert. Modellstart und vorheriges Entpacken sind im Seitendurchschnitt nicht enthalten. Solange ausschließlich OCR läuft, sind null übersetzte Seiten korrekt; es werden keine OpenAI-Aufrufe gestartet. Docker-Messwerte werden nach Möglichkeit etwa alle zehn Sekunden abgefragt: CPU-Prozent (100 % entspricht einem Kern) und RAM-Nutzung; das Messdatum wird angezeigt. Ein nicht unterstützter Statistik-Endpunkt blockiert die OCR nicht.
 
-**Laufende Aufträge vor dem Update abschließen oder abbrechen.** Die neue Version beschleunigt keinen bereits gestarteten Worker. Bei abgebrochener, noch nicht vollständig gespeicherter Texterkennung wird die lokale OCR wiederholt; die Fortschrittsdatei enthält Zähler, keine wiederaufnehmbaren Textresultate einzelner Seiten. Vollständig gespeicherte OCR-Ergebnisse, Originale und fertige Übersetzungen bleiben erhalten.
+**Laufende Aufträge vor dem Update abschließen oder abbrechen.** Die neue Version beschleunigt keinen bereits gestarteten Worker. Bis einschließlich 0.4.3 wird unvollständige OCR nach Abbruch wiederholt; ab 0.4.4 bleiben fertige OCR-Seiten als eigene Checkpoints erhalten. Vollständig gespeicherte OCR-Ergebnisse, Originale und fertige Übersetzungen bleiben erhalten.
 
 ## Fehlerdiagnose und Protokolle (0.4.1)
 

@@ -28,6 +28,8 @@ export type TranslationJob = {
     chapterName: string;
     sourceLanguage: 'ja' | 'en';
     phase: string;
+    pauseRequested?: boolean;
+    stopReason?: string;
     error: string;
     started: string;
     updated: string;
@@ -57,6 +59,8 @@ export type TranslationJob = {
         completed: number;
         total: number;
         blockCount?: number;
+        restoredPages?: number;
+        processedThisRun?: number;
         elapsedSeconds?: number;
         lastPageSeconds?: number;
     };

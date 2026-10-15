@@ -68,11 +68,11 @@ export function TasksScreen() {
             clearTimeout(timer);
         };
     }, [revision]);
-    const cancel = async (kind: string, id: string) => {
+    const cancel = async (kind: string, id: string, action: 'cancel' | 'pause' = 'cancel') => {
         setCancelling(id);
         setError('');
         try {
-            await tasksApi('/cancel', { kind, id });
+            await tasksApi(`/${action}`, { kind, id });
             setRevision((value) => value + 1);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
@@ -114,6 +114,11 @@ export function TasksScreen() {
                             {!task.active ? ' · Angehalten oder bereit zur Prüfung' : ''}
                         </Typography>
                         <Typography variant="body2">{task.detail}</Typography>
+                        {task.pauseRequested && (
+                            <Alert severity="info">
+                                Pausieren angefordert – laufende Seite oder KI-Antwort wird noch gespeichert.
+                            </Alert>
+                        )}
                         {task.progress && task.progress.total > 0 && (
                             <>
                                 <LinearProgress
@@ -133,8 +138,19 @@ export function TasksScreen() {
                         )}
                         <Stack direction="row" spacing={1}>
                             <Button component={Link} to={task.href} variant="outlined">
-                                Vorgang öffnen
+                                {!task.active && task.kind === 'translation' ? 'Öffnen / fortsetzen' : 'Vorgang öffnen'}
                             </Button>
+                            {task.active && task.pausable && (
+                                <Button
+                                    variant="outlined"
+                                    disabled={!!cancelling || task.pauseRequested}
+                                    onClick={() => {
+                                        void cancel(task.kind, task.id, 'pause');
+                                    }}
+                                >
+                                    {task.pauseRequested ? 'Pausieren angefordert …' : 'Pausieren'}
+                                </Button>
+                            )}
                             {task.cancellable && (
                                 <Button
                                     color="warning"
@@ -143,7 +159,7 @@ export function TasksScreen() {
                                         void cancel(task.kind, task.id);
                                     }}
                                 >
-                                    {cancelling === task.id ? 'Abbruch angefordert …' : 'Abbrechen'}
+                                    {cancelling === task.id ? 'Bitte warten …' : 'Abbrechen'}
                                 </Button>
                             )}
                         </Stack>

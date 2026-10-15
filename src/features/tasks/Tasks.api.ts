@@ -14,6 +14,8 @@ export type TaskSummary = {
     phase: string;
     active: boolean;
     cancellable: boolean;
+    pausable?: boolean;
+    pauseRequested?: boolean;
     href: string;
     detail: string;
     progress?: { completed: number; total: number; blockCount?: number };
