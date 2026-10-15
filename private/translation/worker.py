@@ -16,7 +16,8 @@ OCR_CHECKPOINT_VERSION = 1
 MAX_PAGES = 80
 MAX_FILE = 32 * 1024 * 1024
 MAX_TOTAL = 512 * 1024 * 1024
-FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf'
+# This font is installed by fonts-dejavu-core in the runtime image.
+FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
 
 
 def sync_directory(path):
@@ -387,7 +388,7 @@ def render(root, options):
         name = page_name(page['index']) + '.png'
         original = root / 'original' / name
         signature = hashlib.sha256(json.dumps({
-            'version': 1, 'original': hashlib.sha256(original.read_bytes()).hexdigest(),
+            'version': 2, 'font': FONT, 'original': hashlib.sha256(original.read_bytes()).hexdigest(),
             'blocks': [{key: value for key, value in block.items() if key != 'rendered'} for block in page['blocks']],
         }, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         checkpoint = checkpoints / (page_name(page['index']) + '.json')

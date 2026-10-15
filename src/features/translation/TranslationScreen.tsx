@@ -181,10 +181,14 @@ export function TranslationScreen() {
     const current = job?.pages?.[page];
     const included = job?.pages?.filter((item) => scope === 'all' || selectedPages.includes(item.index)) ?? [];
     const hasSelectedWork = included.some((item) => !item.translationComplete || !item.renderComplete);
-    const translateLabel =
+    const needsApi = included.some((item) => !item.translationComplete);
+    let translateLabel =
         scope === 'selected'
             ? 'Ausgewählte Seiten übersetzen / fortsetzen'
             : 'Fehlende Kapitelseiten übersetzen / fortsetzen';
+    if (included.length && !needsApi && hasSelectedWork) {
+        translateLabel = 'Gespeicherte Übersetzung ins Bild einsetzen – lokal';
+    }
     return (
         <Stack spacing={2} sx={{ p: 2, maxWidth: 1200, mx: 'auto' }}>
             <Typography variant="h5">Kapitelübersetzung</Typography>
@@ -443,54 +447,64 @@ export function TranslationScreen() {
                                             onScope={setScope}
                                             onSelected={setSelectedPages}
                                         />
-                                        {!job.calls.length && (
-                                            <>
-                                                <TextField
-                                                    select
-                                                    label="Übersetzungsmodell"
-                                                    value={model}
-                                                    onChange={(event) => setModel(event.target.value)}
-                                                >
-                                                    <MenuItem value="gpt-5.4-mini">GPT-5.4 mini</MenuItem>
-                                                    <MenuItem value="gpt-5.4">GPT-5.4</MenuItem>
-                                                </TextField>
-                                                <TextField
-                                                    select
-                                                    label="Reasoning"
-                                                    value={reasoning}
-                                                    onChange={(event) => setReasoning(event.target.value)}
-                                                >
-                                                    <MenuItem value="low">Niedrig</MenuItem>
-                                                    <MenuItem value="medium">Mittel</MenuItem>
-                                                </TextField>
-                                            </>
+                                        {included.length > 0 && !needsApi && hasSelectedWork && (
+                                            <Alert severity="info">
+                                                Die ausgewählten Seiten sind bereits übersetzt. Es werden nur die
+                                                gespeicherten Texte lokal ins Bild eingesetzt – ohne OpenAI-Aufruf.
+                                            </Alert>
                                         )}
-                                        <TextField
-                                            label="Gesamtes Kostenlimit dieses Kapitels in USD"
-                                            value={budget}
-                                            onChange={(event) => setBudget(event.target.value)}
-                                            slotProps={{ htmlInput: { inputMode: 'decimal' } }}
-                                            helperText="Vorsorgliche Prüfung vor jedem Aufruf. Keine automatische Wiederholung; unbekannte oder externe Kosten können nicht exakt begrenzt werden."
-                                        />
-                                        <FormControlLabel
-                                            control={
-                                                <Checkbox
-                                                    checked={consent}
-                                                    onChange={(_, value) => setConsent(value)}
+                                        {needsApi && (
+                                            <>
+                                                {!job.calls.length && (
+                                                    <>
+                                                        <TextField
+                                                            select
+                                                            label="Übersetzungsmodell"
+                                                            value={model}
+                                                            onChange={(event) => setModel(event.target.value)}
+                                                        >
+                                                            <MenuItem value="gpt-5.4-mini">GPT-5.4 mini</MenuItem>
+                                                            <MenuItem value="gpt-5.4">GPT-5.4</MenuItem>
+                                                        </TextField>
+                                                        <TextField
+                                                            select
+                                                            label="Reasoning"
+                                                            value={reasoning}
+                                                            onChange={(event) => setReasoning(event.target.value)}
+                                                        >
+                                                            <MenuItem value="low">Niedrig</MenuItem>
+                                                            <MenuItem value="medium">Mittel</MenuItem>
+                                                        </TextField>
+                                                    </>
+                                                )}
+                                                <TextField
+                                                    label="Gesamtes Kostenlimit dieses Kapitels in USD"
+                                                    value={budget}
+                                                    onChange={(event) => setBudget(event.target.value)}
+                                                    slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+                                                    helperText="Vorsorgliche Prüfung vor jedem Aufruf. Keine automatische Wiederholung; unbekannte oder externe Kosten können nicht exakt begrenzt werden."
                                                 />
-                                            }
-                                            label="Kapiteltexte und Kontextbilder zur Übersetzung an OpenAI senden (kostenpflichtige API)."
-                                        />
-                                        {job.unknownCalls > 0 && (
-                                            <FormControlLabel
-                                                control={
-                                                    <Checkbox
-                                                        checked={acknowledgeUnknown}
-                                                        onChange={(_, value) => setAcknowledgeUnknown(value)}
+                                                <FormControlLabel
+                                                    control={
+                                                        <Checkbox
+                                                            checked={consent}
+                                                            onChange={(_, value) => setConsent(value)}
+                                                        />
+                                                    }
+                                                    label="Kapiteltexte und Kontextbilder zur Übersetzung an OpenAI senden (kostenpflichtige API)."
+                                                />
+                                                {job.unknownCalls > 0 && (
+                                                    <FormControlLabel
+                                                        control={
+                                                            <Checkbox
+                                                                checked={acknowledgeUnknown}
+                                                                onChange={(_, value) => setAcknowledgeUnknown(value)}
+                                                            />
+                                                        }
+                                                        label="Unbekannte Kosten sind geprüft; unvollständige Aufrufe dürfen gegebenenfalls erneut berechnet werden."
                                                     />
-                                                }
-                                                label="Unbekannte Kosten sind geprüft; unvollständige Aufrufe dürfen gegebenenfalls erneut berechnet werden."
-                                            />
+                                                )}
+                                            </>
                                         )}
                                     </>
                                 )}
@@ -500,9 +514,9 @@ export function TranslationScreen() {
                                         pending ||
                                         anyRunning ||
                                         (!!job.blockCount &&
-                                            (!consent ||
-                                                !hasSelectedWork ||
-                                                (job.unknownCalls > 0 && !acknowledgeUnknown)))
+                                            (!hasSelectedWork ||
+                                                (needsApi &&
+                                                    (!consent || (job.unknownCalls > 0 && !acknowledgeUnknown)))))
                                     }
                                     onClick={() => {
                                         void execute(async () => {

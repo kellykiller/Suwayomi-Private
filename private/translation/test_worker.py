@@ -211,6 +211,16 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(image.tobytes(), before.tobytes())
         self.assertNotEqual(result.tobytes(), before.tobytes())
 
+    def test_default_runtime_font_sets_german_text_without_an_override(self):
+        image = Image.new('RGB', (500, 300), 'white')
+        draw = ImageDraw.Draw(image)
+        draw.text((140, 100), 'HELLO', font=ImageFont.truetype(FONT, 30), fill='black')
+        block = {'id': 'p0b0', 'box': [110, 80, 390, 160], 'translated': 'Grüße, süßer Spaß!'}
+        result, warnings = render_page(image, {'blocks': [block]})
+        self.assertTrue(block['rendered'])
+        self.assertEqual(warnings, [])
+        self.assertNotEqual(result.tobytes(), image.tobytes())
+
     def test_complex_background_and_unfittable_text_are_not_erased(self):
         image = Image.new('RGB', (150, 100), 'black')
         block = {'id': 'p0b0', 'box': [20, 20, 100, 60], 'translated': 'Hallo'}

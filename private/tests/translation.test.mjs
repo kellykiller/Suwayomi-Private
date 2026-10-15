@@ -104,6 +104,7 @@ async function fixture(t, options = {}) {
                     );
             }
         } else {
+            await options.beforeRender?.(job, folder);
             const data = await readJson(folder + '/content.json');
             for (const page of data.pages.filter((page) => page.translationComplete)) {
                 for (const block of page.blocks) block.rendered = true;
@@ -946,4 +947,55 @@ test('Valid context and page responses from legacy output caps are reused after 
     assert.equal((await settled(next, job.id)).phase, 'completed');
     assert.equal(f.modelCalls.length, 3);
     assert.equal((await f.ledger.history()).total, 3);
+});
+
+test('After a renderer failure, only saved page one is rendered after restart with no key, consent or further API charge', async (t) => {
+    let fail = true;
+    const f = await fixture(t, {
+        beforeRender: async () => {
+            if (fail) {
+                fail = false;
+                throw new Error('cannot open resource');
+            }
+        },
+    });
+    const job = await start(f.service);
+    await settled(f.service, job.id);
+    await resume(f.service, job.id, { pages: [0] });
+    const paused = await settled(f.service, job.id);
+    assert.equal(paused.phase, 'paused');
+    assert.equal(paused.completedPages, 1);
+    assert(paused.pages[0].translationComplete);
+    assert.equal(paused.pages[0].renderComplete, false);
+    assert(!paused.pages[1].translationComplete);
+    assert.deepEqual(paused.requestedPages, [0]);
+    assert.equal(f.modelCalls.length, 2);
+    const cost = paused.costUsd;
+    await f.service.stop();
+    await fs.unlink(f.root + '/secrets/openai.token');
+    // Rendering must also work if the chapter context is unavailable: no regeneration.
+    await fs.unlink(f.root + '/translations/' + job.id + '/context.json');
+    const next = createTranslationService({
+        upstream: 'http://127.0.0.1:18082',
+        stateRoot: f.root,
+        secretRoot: f.root + '/secrets',
+        ledger: f.ledger,
+        fetchImpl: f.fetchImpl,
+        imageWorker: f.imageWorker,
+    });
+    t.after(() => next.stop());
+    await resume(next, job.id, { pages: [0], consent: false, budgetUsd: NaN });
+    const done = await settled(next, job.id);
+    assert.equal(done.phase, 'partial');
+    assert.equal(done.completedPages, 1);
+    assert(done.pages[0].renderComplete);
+    assert(!done.pages[1].translationComplete);
+    assert(!done.pages[1].renderComplete);
+    assert.equal(done.costUsd, cost);
+    assert.equal(f.modelCalls.length, 2);
+    assert.equal((await f.ledger.history()).total, 2);
+    assert.deepEqual(f.workerCalls, ['analyze', 'render', 'render']);
+    const available = await next.available(9);
+    assert.match(available.pages[0], /\/translated\/0/);
+    assert.match(available.pages[1], /\/original\/1/);
 });

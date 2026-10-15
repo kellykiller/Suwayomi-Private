@@ -63,3 +63,22 @@ with tempfile.TemporaryDirectory(prefix='ocr-resume-') as folder:
     assert progress['restoredPages'] == 1 and progress['completed'] == 2
     assert 'HELLO' in ' '.join(block['text'] for block in resumed['pages'][0]['blocks']).upper()
     print('Actual offline OCR pause/resume smoke test passed: saved first page reused.')
+
+    # Exercise the production renderer with its default font (no test font override).
+    original = (root / 'original/0000.png').read_bytes()
+    resumed['pages'][0]['blocks'] = [{'id': 'p0b0', 'box': [20, 40, 650, 145],
+        'text': 'HELLO MY FRIEND', 'translated': 'Grüße, mein Freund!', 'confidence': 1.0,
+        'note': '', 'rendered': False, 'reviewed': True}]
+    resumed['pages'][0]['translationComplete'] = True
+    worker.write_json(root / 'content.json', resumed)
+    rendered = worker.render(root, {})
+    assert rendered['pages'][0]['blocks'][0]['rendered'], rendered['pages'][0]['warnings']
+    assert rendered['pages'][0]['renderComplete']
+    assert not rendered['pages'][1].get('translationComplete')
+    assert not (root / 'translated/0001.png').exists()
+    assert (root / 'original/0000.png').read_bytes() == original
+    assert (root / 'translated/0000.png').read_bytes() != original
+    modified = (root / 'translated/0000.png').stat().st_mtime_ns
+    worker.render(root, {})
+    assert (root / 'translated/0000.png').stat().st_mtime_ns == modified
+    print('Actual default-font rendering smoke test passed: German text set on page 1 only; original and cached output retained.')

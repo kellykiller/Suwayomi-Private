@@ -24,6 +24,7 @@ RUN /opt/ocr/bin/python /tmp/download_models.py
 COPY --from=build /source/build ./build
 COPY --from=build /source/private ./private
 COPY LICENSE ./
+RUN /opt/ocr/bin/python -c 'from private.translation.worker import FONT; from PIL import ImageFont; ImageFont.truetype(FONT, 20); print("Renderer font verified:", FONT)'
 USER 0:0
 EXPOSE 18081
 HEALTHCHECK --interval=10s --timeout=6s --start-period=20s --retries=6 CMD ["node", "-e", "fetch('http://192.168.175.60:18081/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]

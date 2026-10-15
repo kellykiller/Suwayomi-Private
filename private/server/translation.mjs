@@ -624,6 +624,9 @@ export function createTranslationService({
             job.completedPages = data.pages.filter((page) => page.translationComplete).length;
             await save(job);
         }
+        await renderTranslated(job, signal);
+    }
+    async function renderTranslated(job, signal) {
         checkPause(job);
         await phase(job, 'rendering');
         signal.throwIfAborted();
@@ -631,6 +634,8 @@ export function createTranslationService({
         job.revision = (job.revision || 0) + 1;
         job.finished = new Date().toISOString();
         job.outputReady = true;
+        const data = await content(job);
+        job.completedPages = data.pages.filter((page) => page.translationComplete).length;
         checkPause(job);
         await phase(job, job.completedPages === data.pages.length ? 'completed' : 'partial');
     }
@@ -713,6 +718,19 @@ export function createTranslationService({
             job.requestedPages = pages;
             job.stopReason = '';
             await phase(job, allRendered ? 'completed' : 'partial');
+            return get(job.id);
+        }
+        if (selected.every((page) => page.translationComplete)) {
+            // No model/key/consent/budget is needed to finish already-paid image rendering.
+            job.requestedPages = pages;
+            await save(job);
+            await logs.write(
+                'translation',
+                'INFO',
+                'Gespeicherte Übersetzungen lokal ins Bild einsetzen; kein OpenAI-Aufruf.',
+                job.id,
+            );
+            launch(job, (signal) => renderTranslated(job, signal));
             return get(job.id);
         }
         assert(input.consent === true, 'Bitte der Übertragung von Kapiteltext und Kontextbildern an OpenAI zustimmen.');
