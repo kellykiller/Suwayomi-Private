@@ -103,6 +103,12 @@ async function listen(server, t) {
     return `http://127.0.0.1:${server.address().port}`;
 }
 
+async function exportState(t) {
+    const root = await fs.mkdtemp(tmpdir() + '/suwayomi-export-state-');
+    t.after(() => fs.rm(root, { recursive: true, force: true }));
+    return root;
+}
+
 const chapter = {
     id: 17,
     mangaId: 7,
@@ -143,12 +149,12 @@ sys.stdout.buffer.write(output.getvalue())
         }
     });
     const upstream = await listen(backend, t);
-    const service = createLibraryExportService({ upstream, python: 'python3' });
+    const stateRoot = await exportState(t);
+    const service = createLibraryExportService({ upstream, python: 'python3', stateRoot });
     let finished;
     const completed = new Promise((resolve) => {
         finished = resolve;
     });
-    const before = new Set(await fs.readdir(tmpdir()));
     const server = createServer(async (req, res) => {
         try {
             await service.archive({ chapterIds: [17] }, 'cbz', req, res);
@@ -181,10 +187,7 @@ with zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())) as archive:
         { input: bytes },
     );
     assert.deepEqual(requests, ['/api/graphql', '/api/v1/chapter/17/download?markAsRead=false']);
-    assert.deepEqual(
-        (await fs.readdir(tmpdir())).filter((name) => name.startsWith('suwayomi-export-') && !before.has(name)),
-        [],
-    );
+    assert.deepEqual(await fs.readdir(stateRoot + '/exports'), []);
 });
 
 test('a failed worker terminates the HTTP download and removes temporary chapter data', async (t) => {
@@ -199,8 +202,8 @@ test('a failed worker terminates the HTTP download and removes temporary chapter
         }
     });
     const upstream = await listen(backend, t);
-    const service = createLibraryExportService({ upstream, python: 'python3' });
-    const before = new Set(await fs.readdir(tmpdir()));
+    const stateRoot = await exportState(t);
+    const service = createLibraryExportService({ upstream, python: 'python3', stateRoot });
     let finished;
     const completed = new Promise((resolve) => {
         finished = resolve;
@@ -220,10 +223,7 @@ test('a failed worker terminates the HTTP download and removes temporary chapter
         await response.arrayBuffer();
     });
     assert.match((await completed).message, /HTTPError/);
-    assert.deepEqual(
-        (await fs.readdir(tmpdir())).filter((name) => name.startsWith('suwayomi-export-') && !before.has(name)),
-        [],
-    );
+    assert.deepEqual(await fs.readdir(stateRoot + '/exports'), []);
 });
 
 test('gateway export routes enforce native Basic Auth, same origin, and validated selections', async (t) => {
@@ -295,8 +295,8 @@ test('browser cancellation stops the Python download and removes temporary data'
         }
     });
     const upstream = await listen(backend, t);
-    const service = createLibraryExportService({ upstream, python: 'python3' });
-    const before = new Set(await fs.readdir(tmpdir()));
+    const stateRoot = await exportState(t);
+    const service = createLibraryExportService({ upstream, python: 'python3', stateRoot });
     let finished;
     const completed = new Promise((resolve) => {
         finished = resolve;
@@ -319,8 +319,5 @@ test('browser cancellation stops the Python download and removes temporary data'
     await rejected;
     assert((await completed) instanceof Error);
     await stopped;
-    assert.deepEqual(
-        (await fs.readdir(tmpdir())).filter((name) => name.startsWith('suwayomi-export-') && !before.has(name)),
-        [],
-    );
+    assert.deepEqual(await fs.readdir(stateRoot + '/exports'), []);
 });

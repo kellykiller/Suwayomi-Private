@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
@@ -38,7 +37,12 @@ export function exportFileName(value) {
     return !result || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(result) ? `_${result || 'Manga'}` : result;
 }
 
-export function createLibraryExportService({ upstream, fetchImpl = fetch, python = '/opt/ocr/bin/python' }) {
+export function createLibraryExportService({
+    upstream,
+    fetchImpl = fetch,
+    python = '/opt/ocr/bin/python',
+    stateRoot = '/update',
+}) {
     const script = fileURLToPath(new URL('../translation/export_archive.py', import.meta.url));
     const credentials = (req) =>
         Object.fromEntries(Object.entries(req.headers).filter(([key]) => ['authorization', 'cookie'].includes(key)));
@@ -126,7 +130,10 @@ export function createLibraryExportService({ upstream, fetchImpl = fetch, python
         try {
             const result = await plan(value, req, controller.signal);
             requireValue(!result.missingIds.length, 'Kapitel fehlen auf dem NAS. Zuerst vollständig herunterladen.');
-            directory = await fs.mkdtemp(join(tmpdir(), 'suwayomi-export-'));
+            // The production container is read-only; /update is its existing writable NAS mount.
+            const root = join(stateRoot, 'exports');
+            await fs.mkdir(root, { recursive: true, mode: 0o700 });
+            directory = await fs.mkdtemp(join(root, 'suwayomi-export-'));
             const oneCbz = format === 'cbz' && result.chapterCount === 1;
             const filename = `${exportFileName(result.title)}${oneCbz ? ' - ' + exportFileName(result.chapters[0].name) : ''}.${oneCbz ? 'cbz' : 'zip'}`;
             child = spawn(python, ['-u', script], {

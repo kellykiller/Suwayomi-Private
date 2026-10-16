@@ -34,7 +34,9 @@ Browser, nicht den erfolgreichen Abschluss des Dateidownloads. Fehler während
 der Übertragung erscheinen in der Downloadanzeige des Browsers.
 
 Das Archiv wird gestreamt und unterstützt ZIP64. Auf dem NAS wird jeweils nur
-ein Kapitelarchiv und gegebenenfalls dessen CBZ-Ausgabe temporär gehalten.
+ein Kapitelarchiv und gegebenenfalls dessen CBZ-Ausgabe temporär im bestehenden
+schreibbaren NAS-Mount `/update/exports` gehalten; das schreibgeschützte
+Container-Dateisystem bleibt unverändert.
 Temporäre Dateien werden nach Abschluss oder Verbindungsabbruch entfernt.
 Kapitelarchive sind auf 1 GiB, entpackte Bilddaten auf 2 GiB je Kapitel und einzelne
 Bilder auf 128 MiB begrenzt. Seitenanzahl, sichere Dateipfade und eindeutige
