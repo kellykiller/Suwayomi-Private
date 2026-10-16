@@ -162,7 +162,7 @@ export function createLibraryExportService({ upstream, fetchImpl = fetch, python
                 child.stdout.once('data', () => {
                     res.writeHead(200, {
                         'Content-Type': oneCbz ? 'application/vnd.comicbook+zip' : 'application/zip',
-                        'Content-Disposition': `attachment; filename="suwayomi-export.${oneCbz ? 'cbz' : 'zip'}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+                        'Content-Disposition': `attachment; filename="suwayomi-export.${oneCbz ? 'cbz' : 'zip'}"; filename*=UTF-8''${encodeURIComponent(filename).replace(/['()*]/g, (character) => '%' + character.charCodeAt(0).toString(16).toUpperCase())}`,
                         'Cache-Control': 'no-store',
                         'X-Content-Type-Options': 'nosniff',
                     });

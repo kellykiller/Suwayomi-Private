@@ -48,22 +48,26 @@ async function getPlan(selection: Selection, signal: AbortSignal): Promise<Expor
         body: JSON.stringify(selection),
     });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error || `Export: HTTP ${response.status}`);
+    if (!response.ok) {
+        throw new Error(result.error || `Export: HTTP ${response.status}`);
+    }
     return result as ExportPlan;
 }
 
 function waitForDownload(signal: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
-        const stop = () => {
-            clearTimeout(timer);
-            reject(new Error('Exportvorbereitung abgebrochen.'));
-        };
         const timer = setTimeout(() => {
             signal.removeEventListener('abort', stop);
             resolve();
         }, 3000);
+        function stop() {
+            clearTimeout(timer);
+            reject(new Error('Exportvorbereitung abgebrochen.'));
+        }
         signal.addEventListener('abort', stop, { once: true });
-        if (signal.aborted) stop();
+        if (signal.aborted) {
+            stop();
+        }
     });
 }
 
@@ -83,12 +87,19 @@ export function LibraryExportDialog({ mangaIds, chapterIds, isVisible, onDismiss
         getPlan({ mangaIds, chapterIds }, controller.signal)
             .then(setPlan)
             .catch((reason: unknown) => {
-                if (!controller.signal.aborted) setError(getErrorMessage(reason));
+                if (!controller.signal.aborted) {
+                    setError(getErrorMessage(reason));
+                }
             })
             .finally(() => {
-                if (!controller.signal.aborted) setLoading(false);
+                if (!controller.signal.aborted) {
+                    setLoading(false);
+                }
             });
-        return () => controller.abort();
+        return () => {
+            controller.abort();
+            active.current?.abort();
+        };
     }, [mangaIds, chapterIds]);
 
     const close = () => {
@@ -110,19 +121,26 @@ export function LibraryExportDialog({ mangaIds, chapterIds, isVisible, onDismiss
                 await requestManager.addChaptersToDownloadQueue(current.missingIds).response;
                 const deadline = Date.now() + 30 * 60 * 1000;
                 while (current.missingIds.length) {
-                    if (Date.now() > deadline)
+                    if (Date.now() > deadline) {
                         throw new Error(
                             'NAS-Downloads sind noch nicht vollständig. Bitte die Download-Warteschlange prüfen und den Export erneut starten.',
                         );
+                    }
+                    // oxlint-disable-next-line no-await-in-loop -- Sequential polling must wait between requests.
                     await waitForDownload(controller.signal);
+                    // oxlint-disable-next-line no-await-in-loop -- Each result decides whether polling continues.
                     current = await getPlan({ mangaIds, chapterIds }, controller.signal);
                     setPlan(current);
                 }
             }
             controller.signal.throwIfAborted();
             const parameters = new URLSearchParams({ format });
-            if (mangaIds?.length) parameters.set('mangaIds', mangaIds.join(','));
-            if (chapterIds?.length) parameters.set('chapterIds', chapterIds.join(','));
+            if (mangaIds?.length) {
+                parameters.set('mangaIds', mangaIds.join(','));
+            }
+            if (chapterIds?.length) {
+                parameters.set('chapterIds', chapterIds.join(','));
+            }
             const anchor = document.createElement('a');
             anchor.href = `/private-api/exports/archive?${parameters}`;
             anchor.download = '';
@@ -131,9 +149,13 @@ export function LibraryExportDialog({ mangaIds, chapterIds, isVisible, onDismiss
             anchor.remove();
             setHandedOff(true);
         } catch (reason) {
-            if (!controller.signal.aborted) setError(getErrorMessage(reason));
+            if (!controller.signal.aborted) {
+                setError(getErrorMessage(reason));
+            }
         } finally {
-            if (!controller.signal.aborted) setWorking(false);
+            if (!controller.signal.aborted) {
+                setWorking(false);
+            }
         }
     };
 
