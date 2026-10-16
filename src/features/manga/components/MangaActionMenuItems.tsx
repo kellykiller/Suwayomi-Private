@@ -9,6 +9,7 @@
 import CheckBoxOutlineBlank from '@mui/icons-material/CheckBoxOutlineBlank';
 import Delete from '@mui/icons-material/Delete';
 import Download from '@mui/icons-material/Download';
+import SaveAlt from '@mui/icons-material/SaveAlt';
 import RemoveDone from '@mui/icons-material/RemoveDone';
 import Done from '@mui/icons-material/Done';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
@@ -44,6 +45,7 @@ import type {
 import { MANGA_ACTION_TO_TRANSLATION } from '@/features/manga/Manga.constants.ts';
 import { CategorySelect } from '@/features/category/components/CategorySelect.tsx';
 import { STABLE_EMPTY_ARRAY } from '@/base/Base.constants.ts';
+import { LibraryExportDialog } from '@/features/library-export/LibraryExportDialog.tsx';
 
 type BaseProps = { onClose: () => void; setHideMenu: (hide: boolean) => void };
 
@@ -121,6 +123,17 @@ export const MangaActionMenuItems = ({
             {!!handleSelection && isSingleMode && (
                 <MenuItem onClick={handleSelect} Icon={CheckBoxOutlineBlank} title={t`Select`} />
             )}
+            <MenuItem
+                Icon={SaveAlt}
+                title="Auf Gerät speichern …"
+                disabled={!isSingleMode && !selectedMangas.length}
+                onClick={() => {
+                    AwaitableComponent.show(LibraryExportDialog, {
+                        mangaIds: isSingleMode ? [manga.id] : Mangas.getIds(selectedMangas),
+                    });
+                    onClose();
+                }}
+            />
             {shouldShowMenuItem(isDownloadable) && (
                 <NestedMenuItem
                     disabled={isMenuItemDisabled(!downloadableMangas.length)}
