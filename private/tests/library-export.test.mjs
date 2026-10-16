@@ -271,3 +271,56 @@ test('gateway export routes enforce native Basic Auth, same origin, and validate
     const invalid = await fetch(url + archive.replace('17', '17%2F..'), { headers });
     assert.equal(invalid.status, 400);
 });
+
+test('browser cancellation stops the Python download and removes temporary data', { timeout: 5000 }, async (t) => {
+    let receiving;
+    const started = new Promise((resolve) => {
+        receiving = resolve;
+    });
+    let disconnected;
+    const stopped = new Promise((resolve) => {
+        disconnected = resolve;
+    });
+    const backend = createServer(async (req, res) => {
+        for await (const _ of req) {
+        }
+        if (req.url === '/api/graphql') {
+            res.end(JSON.stringify({ data: { chapters: { totalCount: 1, nodes: [chapter] } } }));
+        } else {
+            res.once('close', disconnected);
+            res.writeHead(200);
+            res.write(Buffer.alloc(65536));
+            receiving();
+            // Deliberately unfinished chapter: cancelling must close this upstream socket.
+        }
+    });
+    const upstream = await listen(backend, t);
+    const service = createLibraryExportService({ upstream, python: 'python3' });
+    const before = new Set(await fs.readdir(tmpdir()));
+    let finished;
+    const completed = new Promise((resolve) => {
+        finished = resolve;
+    });
+    const server = createServer(async (req, res) => {
+        try {
+            await service.archive({ chapterIds: [17] }, 'folders', req, res);
+            finished(null);
+        } catch (error) {
+            res.destroy();
+            finished(error);
+        }
+    });
+    const url = await listen(server, t);
+    const controller = new AbortController();
+    const download = fetch(url, { signal: controller.signal });
+    const rejected = assert.rejects(download, { name: 'AbortError' });
+    await started;
+    controller.abort();
+    await rejected;
+    assert((await completed) instanceof Error);
+    await stopped;
+    assert.deepEqual(
+        (await fs.readdir(tmpdir())).filter((name) => name.startsWith('suwayomi-export-') && !before.has(name)),
+        [],
+    );
+});
