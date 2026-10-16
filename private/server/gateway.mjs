@@ -29,6 +29,7 @@ import { createAiService } from './ai.mjs';
 import { createTranslationService } from './translation.mjs';
 import { createImageWorker } from './translation-worker.mjs';
 import { createTaskService } from './tasks.mjs';
+import { createLibraryExportService } from './library-export.mjs';
 import { createLogStore, LOG_CATEGORIES } from './logs.mjs';
 
 const hop = new Set([
@@ -159,6 +160,7 @@ export function createGateway({
             imageWorker: createImageWorker({ connection, logs }),
         });
     const tasks = createTaskService({ translations, ai, jobReader, upstream: target, fetchImpl });
+    const libraryExports = createLibraryExportService({ upstream: target, fetchImpl });
     let startingAiAction = false;
     const startAiAction = async (action) => {
         assert(!startingAiAction, 'Eine KI-Aktion wird bereits vorbereitet.');
@@ -215,6 +217,27 @@ export function createGateway({
                     return json(res, 403, {
                         error: 'Die privaten Funktionen benötigen die bestehende Suwayomi-Basic-Auth-Anmeldung.',
                     });
+                if (req.method === 'POST' && url.pathname === '/private-api/exports/plan') {
+                    const config = await configLoader();
+                    if (!sameOrigin(req, config.origins))
+                        return json(res, 403, { error: 'Export muss von derselben Suwayomi-Seite gestartet werden.' });
+                    return json(res, 200, await libraryExports.plan(await body(req, 32768), req));
+                }
+                if (req.method === 'GET' && url.pathname === '/private-api/exports/archive') {
+                    if (req.headers['sec-fetch-site'] === 'cross-site')
+                        return json(res, 403, { error: 'Export muss von derselben Suwayomi-Seite gestartet werden.' });
+                    const parseIds = (name) => {
+                        const value = url.searchParams.get(name);
+                        assert(!value || /^\d+(,\d+)*$/.test(value), 'Ungültige Exportauswahl.');
+                        return value ? value.split(',').map(Number) : [];
+                    };
+                    return await libraryExports.archive(
+                        { mangaIds: parseIds('mangaIds'), chapterIds: parseIds('chapterIds') },
+                        url.searchParams.get('format'),
+                        req,
+                        res,
+                    );
+                }
                 if (req.method === 'GET' && url.pathname === '/private-api/tasks')
                     return json(res, 200, await tasks.list(req));
                 if (

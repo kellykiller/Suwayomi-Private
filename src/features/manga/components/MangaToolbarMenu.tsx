@@ -35,6 +35,8 @@ import type {
     MangaUrlInfo,
 } from '@/features/manga/Manga.types.ts';
 import ShareIcon from '@mui/icons-material/Share';
+import SaveAlt from '@mui/icons-material/SaveAlt';
+import { LibraryExportDialog } from '@/features/library-export/LibraryExportDialog.tsx';
 import { defaultPromiseErrorHandler } from '@/lib/DefaultPromiseErrorHandler.ts';
 import { ShareGuard } from '@/base/components/guard/ShareGuard.tsx';
 
@@ -70,6 +72,17 @@ export const MangaToolbarMenu = ({ manga, onRefresh, refreshing }: IProps) => {
 
     return (
         <>
+            <CustomTooltip title="Auf Gerät speichern">
+                <IconButton
+                    color="inherit"
+                    aria-label="Auf Gerät speichern"
+                    onClick={() => {
+                        AwaitableComponent.show(LibraryExportDialog, { mangaIds: [manga.id] });
+                    }}
+                >
+                    <SaveAlt />
+                </IconButton>
+            </CustomTooltip>
             {isLargeScreen && (
                 <>
                     <CustomTooltip title={t`Reload data from source`} disabled={refreshing}>

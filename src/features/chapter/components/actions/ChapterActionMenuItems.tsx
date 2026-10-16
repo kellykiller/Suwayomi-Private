@@ -10,6 +10,9 @@ import { STABLE_EMPTY_ARRAY, STABLE_EMPTY_OBJECT } from '@/base/Base.constants.t
 import CheckBoxOutlineBlank from '@mui/icons-material/CheckBoxOutlineBlank';
 import Delete from '@mui/icons-material/Delete';
 import Download from '@mui/icons-material/Download';
+import SaveAlt from '@mui/icons-material/SaveAlt';
+import { AwaitableComponent } from 'awaitable-component';
+import { LibraryExportDialog } from '@/features/library-export/LibraryExportDialog.tsx';
 import RemoveDone from '@mui/icons-material/RemoveDone';
 import Done from '@mui/icons-material/Done';
 import BookmarkRemove from '@mui/icons-material/BookmarkRemove';
@@ -184,6 +187,17 @@ export const ChapterActionMenuItems = ({
             {isSingleMode && selectable && (
                 <MenuItem onClick={handleSelect} Icon={CheckBoxOutlineBlank} title={t`Select`} />
             )}
+            <MenuItem
+                Icon={SaveAlt}
+                title="Auf Gerät speichern …"
+                disabled={!isSingleMode && !selectedChapters.length}
+                onClick={() => {
+                    AwaitableComponent.show(LibraryExportDialog, {
+                        chapterIds: isSingleMode ? [chapter.id] : Chapters.getIds(selectedChapters),
+                    });
+                    onClose();
+                }}
+            />
             {isSingleMode && (
                 <>
                     <MenuItem
