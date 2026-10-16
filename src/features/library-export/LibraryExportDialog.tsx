@@ -119,17 +119,21 @@ export function LibraryExportDialog({ mangaIds, chapterIds, isVisible, onDismiss
             if (current.missingIds.length) {
                 // Explicit export action uses the existing Suwayomi downloader, never a second source fetcher.
                 await requestManager.addChaptersToDownloadQueue(current.missingIds).response;
-                const deadline = Date.now() + 30 * 60 * 1000;
+                let deadline = Date.now() + 30 * 60 * 1000;
                 while (current.missingIds.length) {
                     if (Date.now() > deadline) {
                         throw new Error(
-                            'NAS-Downloads sind noch nicht vollständig. Bitte die Download-Warteschlange prüfen und den Export erneut starten.',
+                            'Seit 30 Minuten wurde kein weiteres Kapitel fertig geladen. Bitte die Download-Warteschlange prüfen und den Export erneut starten.',
                         );
                     }
+                    const previousReadyCount = current.readyCount;
                     // oxlint-disable-next-line no-await-in-loop -- Sequential polling must wait between requests.
                     await waitForDownload(controller.signal);
                     // oxlint-disable-next-line no-await-in-loop -- Each result decides whether polling continues.
                     current = await getPlan({ mangaIds, chapterIds }, controller.signal);
+                    if (current.readyCount > previousReadyCount) {
+                        deadline = Date.now() + 30 * 60 * 1000;
+                    }
                     setPlan(current);
                 }
             }

@@ -23,8 +23,9 @@ lokal entpackt; der Zielort hängt von den Download-Einstellungen des Browsers a
 Fehlen Kapitel auf dem NAS, zeigt der Dialog deren Anzahl. **Herunterladen und
 speichern** reiht sie in die vorhandene Suwayomi-Downloadwarteschlange ein und
 wartet auf vollständige Downloads. Schließen bricht nur diese Vorbereitung ab,
-nicht bereits eingereihte NAS-Downloads. Nach 30 Minuten ohne vollständiges
-Ergebnis wird mit einem Hinweis gestoppt. Fehlende Kapitel werden nicht still
+nicht bereits eingereihte NAS-Downloads. Solange weitere Kapitel fertig werden,
+wartet die Vorbereitung auch bei langen Manga weiter. Erst nach 30 Minuten ohne
+ein weiteres vollständiges Kapitel wird mit einem Hinweis gestoppt. Fehlende Kapitel werden nicht still
 weggelassen. Leere Manga müssen zuerst in Suwayomi aktualisiert werden.
 
 Der Geräteexport verwendet ausschließlich Suwayomis lokale CBZ-Ausgabe mit
