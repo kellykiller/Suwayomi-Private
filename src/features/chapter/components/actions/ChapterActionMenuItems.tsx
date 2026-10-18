@@ -50,7 +50,7 @@ import { IconBrowser } from '@/assets/icons/IconBrowser.tsx';
 import CancelIcon from '@mui/icons-material/Cancel';
 import TranslateIcon from '@mui/icons-material/Translate';
 import { useNavigate } from 'react-router-dom';
-import { translationPath } from '@/features/translation/Translation.api.ts';
+import { translationSelectionPath } from '@/features/translation/Translation.api.ts';
 
 type BaseProps = { onClose: () => void; selectable?: boolean };
 
@@ -198,17 +198,21 @@ export const ChapterActionMenuItems = ({
                     onClose();
                 }}
             />
+            <MenuItem
+                Icon={TranslateIcon}
+                disabled={!isSingleMode && !selectedChapters.length}
+                title="Übersetzen"
+                onClick={() => {
+                    navigate(
+                        translationSelectionPath({
+                            chapterIds: isSingleMode ? [chapter.id] : Chapters.getIds(selectedChapters),
+                        }),
+                    );
+                    onClose();
+                }}
+            />
             {isSingleMode && (
                 <>
-                    <MenuItem
-                        Icon={TranslateIcon}
-                        disabled={!isDownloaded}
-                        title="Übersetzen"
-                        onClick={() => {
-                            navigate(translationPath(chapter!.id));
-                            onClose();
-                        }}
-                    />
                     <MenuItem
                         Icon={IconBrowser}
                         disabled={!chapter!.realUrl}

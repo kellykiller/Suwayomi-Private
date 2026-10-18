@@ -4,6 +4,8 @@ import * as fs from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
+import { finished } from 'node:stream/promises';
+import { createWriteStream } from 'node:fs';
 
 const requireValue = (condition, message) => {
     if (!condition) throw new Error(message);
@@ -187,5 +189,25 @@ export function createLibraryExportService({
             if (directory) await fs.rm(directory, { recursive: true, force: true });
         }
     }
-    return { plan, archive };
+    async function archiveFile(chapterId, req, destination, signal) {
+        const output = createWriteStream(destination, { flags: 'wx', mode: 0o600 });
+        // archive() streams a single chapter; this sink needs no HTTP headers.
+        output.writeHead = () => output;
+        const completed = finished(output);
+        completed.catch(() => {});
+        const abort = () => output.destroy(new Error('Kapitelvorbereitung abgebrochen.'));
+        signal?.addEventListener('abort', abort, { once: true });
+        try {
+            signal?.throwIfAborted();
+            await archive({ chapterIds: [chapterId] }, 'cbz', req, output);
+            await completed;
+        } catch (error) {
+            output.destroy();
+            await completed.catch(() => {});
+            throw error;
+        } finally {
+            signal?.removeEventListener('abort', abort);
+        }
+    }
+    return { plan, archive, archiveFile };
 }

@@ -14,6 +14,10 @@ import { translationApi } from '@/features/translation/Translation.api.ts';
 import type { TranslationAvailable } from '@/features/translation/Translation.api.ts';
 
 const eventName = 'suwayomi-translation-reader';
+export function enableGermanReader() {
+    localStorage.setItem(eventName, 'de');
+    window.dispatchEvent(new Event(eventName));
+}
 const preference = () => localStorage.getItem(eventName) === 'de';
 const subscribe = (listener: () => void) => {
     window.addEventListener(eventName, listener);

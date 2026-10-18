@@ -9,3 +9,5 @@ dev-dist/*
 
 src/lib/graphql/schema.json
 .oxlintrc.jsonc
+__pycache__/
+*.pyc

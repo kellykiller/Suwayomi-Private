@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 import { assert } from './common.mjs';
 const running = (job) => !['ready', 'paused', 'partial', 'completed'].includes(job.phase);
-export function createTaskService({ translations, ai, jobReader, upstream, fetchImpl = fetch }) {
+export function createTaskService({ translations, cloud, ai, jobReader, upstream, fetchImpl = fetch }) {
     async function privateTasks(req) {
         const tasks = [],
             warnings = [];
@@ -77,6 +77,28 @@ export function createTaskService({ translations, ai, jobReader, upstream, fetch
                         ': Status konnte nicht geladen werden.',
                 );
         });
+        if (cloud) {
+            try {
+                for (const batch of await cloud.list()) {
+                    if (['completed', 'completed_with_retained_regions', 'cancelled'].includes(batch.phase)) continue;
+                    const done = batch.chapters.filter((c) => c.outputReady || c.status === 'skipped').length;
+                    tasks.push({
+                        kind: 'cloud',
+                        id: batch.id,
+                        title: batch.title,
+                        phase: batch.phase,
+                        active: ['queued', 'running', 'cancelling'].includes(batch.phase),
+                        cancellable: true,
+                        pausable: false,
+                        href: `/settings/translations?batch=${batch.id}`,
+                        detail: batch.message,
+                        progress: { completed: done, total: batch.chapters.length },
+                    });
+                }
+            } catch {
+                warnings.push('Cloud-Uebersetzung: Status konnte nicht geladen werden.');
+            }
+        }
         return { tasks, warnings };
     }
     async function list(req) {
@@ -133,12 +155,15 @@ export function createTaskService({ translations, ai, jobReader, upstream, fetch
     async function cancel(input, req) {
         assert(
             input &&
-                ['translation', 'ai'].includes(input.kind) &&
+                ['translation', 'cloud', 'ai'].includes(input.kind) &&
                 typeof input.id === 'string' &&
                 /^[a-f0-9-]{36}$/.test(input.id),
             'Diese Aufgabe kann hier nicht abgebrochen werden.',
         );
-        if (input.kind === 'translation') await translations.cancel(input.id);
+        if (input.kind === 'cloud') {
+            assert(cloud, 'Cloud-Dienst fehlt.');
+            await cloud.cancel(input.id);
+        } else if (input.kind === 'translation') await translations.cancel(input.id);
         else await ai.cancel(input.id, req);
         return { requested: true };
     }
