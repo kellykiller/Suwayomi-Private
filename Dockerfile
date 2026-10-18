@@ -1,3 +1,11 @@
+FROM python:3.12-slim-bookworm AS translator
+WORKDIR /opt/translator
+COPY private/cloud-translator/app/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+COPY private/cloud-translator/app ./app
+COPY private/cloud-translator/server ./server
+RUN mkdir /opt/translator/seed && chmod -R a+rX /opt/translator
+
 FROM node:24-bookworm-slim AS build
 WORKDIR /source
 RUN npm install --global pnpm@11.1.2
@@ -24,8 +32,15 @@ RUN /opt/ocr/bin/python /tmp/download_models.py
 COPY --from=build /source/build ./build
 COPY --from=build /source/private ./private
 COPY LICENSE ./
+COPY --from=translator /usr/local/ /opt/translator-runtime/
+COPY --from=translator /opt/translator/ /opt/translator/
+RUN mkdir -p /opt/translator/app/font \
+    && cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf /opt/translator/app/font/ \
+    && cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf /app/private/cloud-translator/app/font/ \
+    && chmod -R a+rX /opt/translator /opt/translator-runtime
+LABEL io.suwayomi.translator.version="0.1.2"
 RUN /opt/ocr/bin/python -c 'from private.translation.worker import FONT; from PIL import ImageFont; ImageFont.truetype(FONT, 20); print("Renderer font verified:", FONT)'
 USER 0:0
 EXPOSE 18081
-HEALTHCHECK --interval=10s --timeout=6s --start-period=20s --retries=6 CMD ["node", "-e", "fetch('http://192.168.175.60:18081/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+HEALTHCHECK --interval=10s --timeout=6s --start-period=180s --retries=6 CMD ["node", "-e", "fetch('http://192.168.175.60:18081/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 CMD ["node", "private/server/gateway.mjs"]

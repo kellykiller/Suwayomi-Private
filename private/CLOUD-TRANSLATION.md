@@ -1,4 +1,29 @@
-# Automatische Cloud-Uebersetzung (Private 0.5.1)
+# Automatische Cloud-Uebersetzung (Private 0.5.2)
+
+## Direkt in Suwayomi aktualisieren
+
+Unter **Einstellungen > Private Updates > Pruefen** Version **0.5.2** installieren
+und nach erfolgreichem Update die Seite neu laden. Das bestehende Update baut
+jetzt auch Uebersetzerdienst **0.1.2** in dasselbe Image ein und aktualisiert den
+bereits eingerichteten Dienst automatisch. Kein ZIP-Import, SSH-Aufruf oder
+erneutes Eintragen der Cloud-Schluessel ist dafuer erforderlich.
+
+Vor dem Austausch laeuft ein Offline-Selbsttest ohne Netzwerk und ohne Zugriff
+auf Daten oder Schluessel. Er prueft insbesondere AVIF, HEIC und PDF. Erst danach
+wird ein unbeschaeftigter Dienst ausgetauscht; seine Daten- und Secret-Verzeichnisse,
+Loopback-Port und Neustartregel bleiben erhalten. Die Startpruefung kontrolliert
+Version und gespeicherte Schluessel. Scheitert der Austausch, wird der bisherige
+Dienst wiederhergestellt. Der alte Container bleibt als gestoppte Sicherung
+erhalten. Der WebUI-Updater meldet den gesamten Vorgang erst dann erfolgreich,
+wenn auch der Dienst bereit ist.
+
+Normale WebUI-Neustarts und ein ausdrueckliches WebUI-Rollback aktualisieren den
+Dienst nicht. Das WebUI-Rollback setzt seine Version nicht zurueck. Ist noch kein
+separater Dienst eingerichtet, installiert dieses Update keinen neuen Dienst.
+Aktive Uebersetzungen vor dem Update abschliessen oder abbrechen. Update und
+Selbsttest senden **keine Cloud-Anfragen** und starten keine Uebersetzung neu.
+Den fehlgeschlagenen AVIF-Auftrag anschliessend ausdruecklich **Fortsetzen**;
+erst diese Verarbeitung kann wieder kostenpflichtige Anfragen ausloesen.
 
 ## Bild- und Dokumentformate
 
@@ -21,14 +46,12 @@ keinen separaten Browser-Dateiupload fuer beliebige lokale Dokumente. Der
 separate Dienst akzeptiert einzelne Bilder/PDFs auch direkt ueber seine lokale
 API oder den Pipeline-Aufruf.
 
-Dienst 0.1.2 zuerst installieren, danach dieses Gateway-Update. Gespeicherte
-Schluessel, Zugriffstoken und Auftraege bleiben erhalten. Der bisherige
-AVIF-Fehler kann durch explizites Fortsetzen desselben Auftrags behoben werden.
+Gespeicherte Schluessel, Zugriffstoken und Auftraege bleiben erhalten.
 Neue lokale Eingabefehler werden mit ihrem konkreten Fehlertext angezeigt und
 im Uebersetzungsprotokoll festgehalten; der interne Token wird ausgeblendet.
 
-Die private Oberflaeche verbindet sich mit dem separat installierten Dienst
-`suwayomi-cloud-translator:0.1.2` auf `127.0.0.1:18083`. Der getestete
+Die private Oberflaeche verbindet sich mit dem separaten Container
+`suwayomi-cloud-translator` (Dienstversion 0.1.2) auf `127.0.0.1:18083`. Der getestete
 Kapitel-Uebersetzer mit automatischer Ausnahmepruefung bleibt unveraendert.
 Google Cloud Vision uebernimmt OCR, OpenAI (`gpt-6-astra`) Bildpruefung und
 Uebersetzung mit Kapitelkontext. Retusche und Textsatz laufen im CPU-Dienst
@@ -56,7 +79,7 @@ bleiben beim Uebersetzungsdienst. Keine Stack-Aenderung, kein neuer Port und
 keine weitere Volume-Freigabe erforderlich. Bei Austausch des internen Tokens
 im Dienst den Kopierschritt wiederholen. Niemals Tokenwerte in Chat/Logs posten.
 
-Anschliessend in **Einstellungen > Private Updates** Version 0.5.1 installieren
+Anschliessend in **Einstellungen > Private Updates** Version 0.5.2 installieren
 und die Seite neu laden. Unter **Kapiteluebersetzung** erscheint der automatische
 Ablauf. Ein gespeicherter Schluessel bedeutet noch keinen bestaetigten Zugang
 zum Cloud-Anbieter; dies prueft erst eine ausdruecklich gestartete Verarbeitung.

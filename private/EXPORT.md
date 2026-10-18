@@ -1,4 +1,4 @@
-# Bibliothek auf das eigene Gerät exportieren (0.5.1)
+# Bibliothek auf das eigene Gerät exportieren (0.5.2)
 
 Der Exportadapter berücksichtigt JPG/JPEG, PNG, WebP, AVIF, GIF, BMP/DIB,
 TIFF/TIF, HEIC/HEIF, PDF und weitere Rasterformate. Die Dateien bleiben im

@@ -32,6 +32,7 @@ import { createTaskService } from './tasks.mjs';
 import { createLibraryExportService } from './library-export.mjs';
 import { createCloudTranslationService } from './cloud-translations.mjs';
 import { createLogStore, LOG_CATEGORIES } from './logs.mjs';
+import { translatorBootstrap } from './translator-update.mjs';
 
 const hop = new Set([
     'connection',
@@ -140,6 +141,7 @@ export function createGateway({
     translationService,
     cloudTranslationService,
     logService,
+    componentUpdate = { status: () => ({ ready: true }) },
 } = {}) {
     const target = new URL(upstream);
     assert(
@@ -209,11 +211,14 @@ export function createGateway({
                         signal: AbortSignal.timeout(5000),
                     });
                 } catch {}
-                const ready = !!response && [200, 301, 302, 303, 307, 308, 401].includes(response.status);
+                const component = componentUpdate.status();
+                const ready =
+                    !!response && [200, 301, 302, 303, 307, 308, 401].includes(response.status) && component.ready;
                 return json(res, ready ? 200 : 503, {
                     ready,
                     commit: manifest.commit,
                     version: manifest.version,
+                    translator: component.status,
                 });
             }
             if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
@@ -480,7 +485,11 @@ export function createGateway({
                         repository: REPOSITORY,
                         serverRevision: user.serverRevision,
                         configured: { github: !!keys.github, portainer: !!keys.portainer },
-                        job: running || last,
+                        job:
+                            (running || last)?.phase === 'deploying' && componentUpdate.status().message
+                                ? { ...(running || last), message: componentUpdate.status().message }
+                                : running || last,
+                        translatorUpdate: componentUpdate.status(),
                         busy: !!running,
                         taskBlockers: (await tasks.privateTasks(req)).tasks.filter(
                             (task) => task.active && ['translation', 'cloud', 'ai'].includes(task.kind),
@@ -639,8 +648,19 @@ export function createGateway({
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
     const manifest = await readJson('private/manifest.json');
-    const gateway = createGateway({ upstream: process.env.SUWAYOMI_UPSTREAM || UPSTREAM, manifest });
-    gateway.listen(18081, '192.168.175.60', () => console.log('Suwayomi-Private ' + manifest.version + ' bereit.'));
+    const componentUpdate = translatorBootstrap({
+        manifest,
+        connection: async () => {
+            const config = await loadConfig();
+            const keys = await secrets();
+            return { config, api: portainerClient(config.portainerUrl, keys.portainer) };
+        },
+    });
+    const gateway = createGateway({ upstream: process.env.SUWAYOMI_UPSTREAM || UPSTREAM, manifest, componentUpdate });
+    gateway.listen(18081, '192.168.175.60', () => {
+        console.log('Suwayomi-Private ' + manifest.version + ' bereit.');
+        void componentUpdate.start();
+    });
     for (const signal of ['SIGTERM', 'SIGINT'])
         process.on(signal, () => {
             gateway.close();
