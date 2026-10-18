@@ -36,6 +36,8 @@ import type {
 } from '@/features/manga/Manga.types.ts';
 import ShareIcon from '@mui/icons-material/Share';
 import SaveAlt from '@mui/icons-material/SaveAlt';
+import TranslateIcon from '@mui/icons-material/Translate';
+import { translationSelectionPath } from '@/features/translation/Translation.api.ts';
 import { LibraryExportDialog } from '@/features/library-export/LibraryExportDialog.tsx';
 import { defaultPromiseErrorHandler } from '@/lib/DefaultPromiseErrorHandler.ts';
 import { ShareGuard } from '@/base/components/guard/ShareGuard.tsx';
@@ -72,6 +74,16 @@ export const MangaToolbarMenu = ({ manga, onRefresh, refreshing }: IProps) => {
 
     return (
         <>
+            <CustomTooltip title="Manga übersetzen">
+                <IconButton
+                    component={Link}
+                    to={translationSelectionPath({ mangaIds: [manga.id] })}
+                    color="inherit"
+                    aria-label="Manga übersetzen"
+                >
+                    <TranslateIcon />
+                </IconButton>
+            </CustomTooltip>
             <CustomTooltip title="Auf Gerät speichern">
                 <IconButton
                     color="inherit"

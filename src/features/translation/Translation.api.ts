@@ -133,5 +133,7 @@ export async function translationApi<T>(
     return result as T;
 }
 export const translationPath = (chapterId: number) => `/settings/translations?chapter=${chapterId}`;
+export const translationSelectionPath = (selection: { chapterIds?: number[]; mangaIds?: number[] }) =>
+    `/settings/translations?${new URLSearchParams(Object.fromEntries(Object.entries(selection).map(([key, ids]) => [key, ids.join(',')]))).toString()}`;
 export const translationImage = (id: string, kind: 'original' | 'translated' | 'preview', page: number, revision = 0) =>
     `/private-api/translations/files/${id}/${kind}/${page}?v=${revision}`;

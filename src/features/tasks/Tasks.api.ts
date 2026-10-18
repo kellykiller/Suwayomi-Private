@@ -8,7 +8,7 @@
 
 import { AuthManager } from '@/features/authentication/AuthManager.ts';
 export type TaskSummary = {
-    kind: 'translation' | 'ai' | 'update' | 'downloads' | 'library';
+    kind: 'translation' | 'cloud' | 'ai' | 'update' | 'downloads' | 'library';
     id: string;
     title: string;
     phase: string;

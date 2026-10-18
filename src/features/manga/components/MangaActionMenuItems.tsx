@@ -46,6 +46,9 @@ import { MANGA_ACTION_TO_TRANSLATION } from '@/features/manga/Manga.constants.ts
 import { CategorySelect } from '@/features/category/components/CategorySelect.tsx';
 import { STABLE_EMPTY_ARRAY } from '@/base/Base.constants.ts';
 import { LibraryExportDialog } from '@/features/library-export/LibraryExportDialog.tsx';
+import TranslateIcon from '@mui/icons-material/Translate';
+import { useNavigate } from 'react-router-dom';
+import { translationSelectionPath } from '@/features/translation/Translation.api.ts';
 
 type BaseProps = { onClose: () => void; setHideMenu: (hide: boolean) => void };
 
@@ -75,6 +78,7 @@ export const MangaActionMenuItems = ({
     setHideMenu,
 }: Props) => {
     const { t } = useLingui();
+    const navigate = useNavigate();
 
     const [isTrackDialogOpen, setIsTrackDialogOpen] = useState(false);
 
@@ -131,6 +135,19 @@ export const MangaActionMenuItems = ({
                     AwaitableComponent.show(LibraryExportDialog, {
                         mangaIds: isSingleMode ? [manga.id] : Mangas.getIds(selectedMangas),
                     });
+                    onClose();
+                }}
+            />
+            <MenuItem
+                Icon={TranslateIcon}
+                title="Übersetzen"
+                disabled={!isSingleMode && !selectedMangas.length}
+                onClick={() => {
+                    navigate(
+                        translationSelectionPath({
+                            mangaIds: isSingleMode ? [manga.id] : Mangas.getIds(selectedMangas),
+                        }),
+                    );
                     onClose();
                 }}
             />

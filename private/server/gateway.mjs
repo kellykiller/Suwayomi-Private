@@ -30,6 +30,7 @@ import { createTranslationService } from './translation.mjs';
 import { createImageWorker } from './translation-worker.mjs';
 import { createTaskService } from './tasks.mjs';
 import { createLibraryExportService } from './library-export.mjs';
+import { createCloudTranslationService } from './cloud-translations.mjs';
 import { createLogStore, LOG_CATEGORIES } from './logs.mjs';
 
 const hop = new Set([
@@ -134,6 +135,7 @@ export function createGateway({
     stateRead = readJson,
     aiService,
     translationService,
+    cloudTranslationService,
     logService,
 } = {}) {
     const target = new URL(upstream);
@@ -159,8 +161,18 @@ export function createGateway({
             updateBusy: jobReader,
             imageWorker: createImageWorker({ connection, logs }),
         });
-    const tasks = createTaskService({ translations, ai, jobReader, upstream: target, fetchImpl });
     const libraryExports = createLibraryExportService({ upstream: target, fetchImpl });
+    const cloud =
+        cloudTranslationService ||
+        createCloudTranslationService({
+            upstream: target,
+            fetchImpl,
+            libraryExports,
+            chapterReader: (id, req) => translations.chapter(id, req),
+            updateBusy: jobReader,
+            otherBusy: () => translations.busy?.() || ai.busy?.(),
+        });
+    const tasks = createTaskService({ translations, cloud, ai, jobReader, upstream: target, fetchImpl });
     let startingAiAction = false;
     const startAiAction = async (action) => {
         assert(!startingAiAction, 'Eine KI-Aktion wird bereits vorbereitet.');
@@ -273,6 +285,46 @@ export function createGateway({
                     return json(res, 200, result);
                 }
                 const config = await configLoader();
+                if (url.pathname.startsWith('/private-api/cloud-translations/')) {
+                    const suffix = url.pathname.slice('/private-api/cloud-translations/'.length);
+                    if (req.method === 'GET' && suffix === 'status') return json(res, 200, await cloud.status());
+                    if (req.method === 'GET' && suffix === 'jobs') return json(res, 200, { jobs: await cloud.list() });
+                    const batch = suffix.match(/^jobs\/([a-f0-9-]{36})$/)?.[1];
+                    if (req.method === 'GET' && batch) return json(res, 200, await cloud.get(batch));
+                    const file = suffix.match(/^files\/([a-f0-9-]{36})\/([a-f0-9-]{36})\/(result.cbz|page\/(\d+))$/);
+                    if (req.method === 'GET' && file) {
+                        const image = await cloud.file(
+                            file[1],
+                            file[2],
+                            file[3] === 'result.cbz' ? null : Number(file[4]),
+                        );
+                        const info = await fs.stat(image.path);
+                        res.writeHead(200, {
+                            'Content-Type': image.type,
+                            'Content-Length': info.size,
+                            'Cache-Control': 'private, no-cache',
+                            'X-Content-Type-Options': 'nosniff',
+                            ...(file[3] === 'result.cbz'
+                                ? { 'Content-Disposition': 'attachment; filename="kapitel-de.cbz"' }
+                                : {}),
+                        });
+                        createReadStream(image.path)
+                            .on('error', () => res.destroy())
+                            .pipe(res);
+                        return;
+                    }
+                    if (req.method !== 'POST') return json(res, 404, { error: 'Unbekannte Cloud-Aktion.' });
+                    if (!sameOrigin(req, config.origins))
+                        return json(res, 403, {
+                            error: 'Cloud-Uebersetzung muss von derselben Suwayomi-Seite gestartet werden.',
+                        });
+                    const input = await body(req, 32768);
+                    if (suffix === 'plan') return json(res, 200, await cloud.plan(input, req));
+                    if (suffix === 'start') return json(res, 202, await startAiAction(() => cloud.start(input, req)));
+                    if (suffix === 'resume') return json(res, 202, await startAiAction(() => cloud.resume(input, req)));
+                    if (suffix === 'cancel') return json(res, 200, await cloud.cancel(input.id));
+                    return json(res, 404, { error: 'Unbekannte Cloud-Aktion.' });
+                }
                 if (url.pathname.startsWith('/private-api/translations/')) {
                     if (req.method === 'GET' && url.pathname === '/private-api/translations/performance')
                         return json(res, 200, await translations.performance());
@@ -283,7 +335,9 @@ export function createGateway({
                         const info = await translations.chapter(Number(chapterId), req);
                         return json(res, 200, {
                             chapter: info,
-                            available: await translations.available(Number(chapterId), info),
+                            available:
+                                (await cloud.available(Number(chapterId), info)) ||
+                                (await translations.available(Number(chapterId), info)),
                         });
                     }
                     const id = url.pathname.match(/^\/private-api\/translations\/jobs\/([a-f0-9-]{36})$/)?.[1];
@@ -314,9 +368,23 @@ export function createGateway({
                     if (url.pathname === '/private-api/translations/performance')
                         return json(res, 200, await translations.savePerformance(input));
                     if (url.pathname === '/private-api/translations/analyze')
-                        return json(res, 202, await startAiAction(() => translations.start(input, req)));
+                        return json(
+                            res,
+                            202,
+                            await startAiAction(() => {
+                                assert(!cloud.busy(), 'Bitte den Cloud-Auftrag zuerst beenden.');
+                                return translations.start(input, req);
+                            }),
+                        );
                     if (url.pathname === '/private-api/translations/translate')
-                        return json(res, 202, await startAiAction(() => translations.resume(input, req)));
+                        return json(
+                            res,
+                            202,
+                            await startAiAction(() => {
+                                assert(!cloud.busy(), 'Bitte den Cloud-Auftrag zuerst beenden.');
+                                return translations.resume(input, req);
+                            }),
+                        );
                     if (url.pathname === '/private-api/translations/edit')
                         return json(res, 202, await translations.edit(input));
                     if (url.pathname === '/private-api/translations/pause')
@@ -359,7 +427,7 @@ export function createGateway({
                     if (url.pathname === '/private-api/ai/test') return json(res, 200, await ai.testConnection());
                     if (url.pathname === '/private-api/ai/search') {
                         assert(
-                            !translations.busy(),
+                            !translations.busy() && !cloud.busy(),
                             'Bitte die Kapitelverarbeitung vor einer weiteren KI-Suche abwarten.',
                         );
                         return json(res, 202, await startAiAction(() => ai.start(input, req)));
@@ -393,7 +461,7 @@ export function createGateway({
                         job: running || last,
                         busy: !!running,
                         taskBlockers: (await tasks.privateTasks(req)).tasks.filter(
-                            (task) => task.active && ['translation', 'ai'].includes(task.kind),
+                            (task) => task.active && ['translation', 'cloud', 'ai'].includes(task.kind),
                         ),
                         canRollback: !!rollback?.previousPrivateVersion,
                     });
@@ -418,6 +486,7 @@ export function createGateway({
                     });
                 }
                 if (url.pathname === '/private-api/update' || url.pathname === '/private-api/rollback') {
+                    assert(!cloud.busy(), 'Bitte den Cloud-Auftrag zuerst abwarten oder abbrechen.');
                     assert(
                         !translations.busy(),
                         'Bitte die laufende Kapitelübersetzung zuerst abwarten oder abbrechen.',
@@ -502,7 +571,10 @@ export function createGateway({
     });
     let closing;
     server.shutdownPrivate = () => {
-        closing ||= translations.stop().finally(() => ai.stop());
+        closing ||= cloud
+            .stop()
+            .finally(() => translations.stop())
+            .finally(() => ai.stop());
         return closing;
     };
     server.on('close', () => {

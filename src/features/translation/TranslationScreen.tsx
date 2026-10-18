@@ -35,6 +35,7 @@ import type {
     TranslationJob,
 } from '@/features/translation/Translation.api.ts';
 import { AppRoutes } from '@/base/AppRoute.constants.ts';
+import { CloudTranslationScreen } from '@/features/translation/CloudTranslationScreen.tsx';
 
 const phases: Record<string, string> = {
     queued: 'Vorbereitung',
@@ -53,6 +54,11 @@ const money = (value: number | null | undefined) =>
     value === null || value === undefined ? 'unbekannt' : `$${value.toFixed(5)}`;
 
 export function TranslationScreen() {
+    const [params] = useSearchParams();
+    return params.has('legacy') || params.has('job') ? <LegacyTranslationScreen /> : <CloudTranslationScreen />;
+}
+
+function LegacyTranslationScreen() {
     useAppTitle('Kapitelübersetzung');
     const [params, setParams] = useSearchParams();
     const chapterId = Number(params.get('chapter') || 0);
