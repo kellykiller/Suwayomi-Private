@@ -10,7 +10,10 @@ import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
 
-IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif"}
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".jpe", ".jfif", ".png", ".webp", ".avif",
+                  ".gif", ".giff", ".bmp", ".dib", ".tif", ".tiff",
+                  ".heic", ".heif", ".hif", ".pdf", ".jp2", ".j2k", ".jpf", ".jpx",
+                  ".ppm", ".pgm", ".pbm", ".pnm", ".tga", ".pcx", ".ico"}
 MAX_CHAPTER_BYTES = 1024 ** 3
 MAX_PAGE_BYTES = 128 * 1024 ** 2
 

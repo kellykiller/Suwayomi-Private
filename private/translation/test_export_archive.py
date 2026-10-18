@@ -87,6 +87,14 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(safe_name('a/b\\c:*?'), 'a_b_c___')
         self.assertEqual(safe_name('name. '), 'name')
 
+    def test_all_document_and_image_formats_are_preserved_for_the_cloud_import(self):
+        suffixes = ['jpg', 'jpeg', 'png', 'bmp', 'tif', 'tiff', 'gif', 'giff', 'webp',
+                    'avif', 'heic', 'heif', 'pdf', 'jp2', 'tga', 'pcx', 'ico', 'ppm']
+        entries = [(f'{index:04d}.{suffix}', suffix.encode()) for index, suffix in enumerate(suffixes, 1)]
+        with zipfile.ZipFile(io.BytesIO(cbz(entries))) as source:
+            result = image_entries(source, len(entries))
+            self.assertEqual([item.filename for item in result], [name for name, _ in entries])
+
     def test_failed_download_cleans_current_chapter(self):
         with tempfile.TemporaryDirectory() as directory:
             def fail(config, chapter, path):

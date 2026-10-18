@@ -109,7 +109,10 @@ export async function authenticate(req, upstream, fetchImpl = fetch) {
         signal: AbortSignal.timeout(10000),
     });
     if (response.status === 401)
-        return { authorized: false, challenge: response.headers.get('www-authenticate') || 'Basic realm="Suwayomi"' };
+        return {
+            authorized: false,
+            challenge: response.headers.get('www-authenticate') || 'Basic realm="Suwayomi"',
+        };
     if (!response.ok) throw new Error('Suwayomi-Anmeldung konnte nicht geprüft werden.');
     const value = await response.json();
     if (value.errors || !value.data?.settings?.authMode)
@@ -167,12 +170,20 @@ export function createGateway({
         createCloudTranslationService({
             upstream: target,
             fetchImpl,
+            logs,
             libraryExports,
             chapterReader: (id, req) => translations.chapter(id, req),
             updateBusy: jobReader,
             otherBusy: () => translations.busy?.() || ai.busy?.(),
         });
-    const tasks = createTaskService({ translations, cloud, ai, jobReader, upstream: target, fetchImpl });
+    const tasks = createTaskService({
+        translations,
+        cloud,
+        ai,
+        jobReader,
+        upstream: target,
+        fetchImpl,
+    });
     let startingAiAction = false;
     const startAiAction = async (action) => {
         assert(!startingAiAction, 'Eine KI-Aktion wird bereits vorbereitet.');
@@ -193,10 +204,17 @@ export function createGateway({
             if (url.pathname === '/healthz' && req.method === 'GET') {
                 let response;
                 try {
-                    response = await fetchImpl(target, { redirect: 'manual', signal: AbortSignal.timeout(5000) });
+                    response = await fetchImpl(target, {
+                        redirect: 'manual',
+                        signal: AbortSignal.timeout(5000),
+                    });
                 } catch {}
                 const ready = !!response && [200, 301, 302, 303, 307, 308, 401].includes(response.status);
-                return json(res, ready ? 200 : 503, { ready, commit: manifest.commit, version: manifest.version });
+                return json(res, ready ? 200 : 503, {
+                    ready,
+                    commit: manifest.commit,
+                    version: manifest.version,
+                });
             }
             if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
                 const outgoing = http.request(
@@ -232,12 +250,16 @@ export function createGateway({
                 if (req.method === 'POST' && url.pathname === '/private-api/exports/plan') {
                     const config = await configLoader();
                     if (!sameOrigin(req, config.origins))
-                        return json(res, 403, { error: 'Export muss von derselben Suwayomi-Seite gestartet werden.' });
+                        return json(res, 403, {
+                            error: 'Export muss von derselben Suwayomi-Seite gestartet werden.',
+                        });
                     return json(res, 200, await libraryExports.plan(await body(req, 32768), req));
                 }
                 if (req.method === 'GET' && url.pathname === '/private-api/exports/archive') {
                     if (req.headers['sec-fetch-site'] === 'cross-site')
-                        return json(res, 403, { error: 'Export muss von derselben Suwayomi-Seite gestartet werden.' });
+                        return json(res, 403, {
+                            error: 'Export muss von derselben Suwayomi-Seite gestartet werden.',
+                        });
                     const parseIds = (name) => {
                         const value = url.searchParams.get(name);
                         assert(!value || /^\d+(,\d+)*$/.test(value), 'Ungültige Exportauswahl.');
@@ -585,7 +607,9 @@ export function createGateway({
             socket.destroy();
             return;
         }
-        const outgoing = http.request(new URL(req.url, target), { headers: { ...req.headers, host: target.host } });
+        const outgoing = http.request(new URL(req.url, target), {
+            headers: { ...req.headers, host: target.host },
+        });
         outgoing.on('upgrade', (incoming, backend, buffer) => {
             socket.write(
                 'HTTP/1.1 101 Switching Protocols\r\n' +

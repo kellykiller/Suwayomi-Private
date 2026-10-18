@@ -1,4 +1,9 @@
-# Bibliothek auf das eigene Gerät exportieren (0.4.9)
+# Bibliothek auf das eigene Gerät exportieren (0.5.1)
+
+Der Exportadapter berücksichtigt JPG/JPEG, PNG, WebP, AVIF, GIF, BMP/DIB,
+TIFF/TIF, HEIC/HEIF, PDF und weitere Rasterformate. Die Dateien bleiben im
+Geräteexport bytegleich erhalten. Die Aufteilung mehrseitiger Dokumente und
+PNG-Arbeitskopien erfolgen ausschließlich im separaten Übersetzungsdienst.
 
 In der Bibliothek das Menü eines Manga öffnen oder mehrere Manga auswählen und
 **Auf Gerät speichern …** wählen. Auf der Manga-Detailseite steht dieselbe Funktion

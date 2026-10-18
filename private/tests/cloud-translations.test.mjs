@@ -66,6 +66,8 @@ async function fixture(t, options = {}) {
         calls = [],
         services = [];
     let lost = !!options.lost;
+    let rejected = !!options.rejectFirst;
+    const outputZip = options.expanded ? zip(['0001.png', '0002.png', '0003.png']) : resultZip;
     let cancelPolls = 0;
     const libraryExports = {
         plan: async (selection) => {
@@ -97,12 +99,18 @@ async function fixture(t, options = {}) {
             assert(query.query.includes('enqueueChapterDownload'));
             const item = chapters.find((c) => c.id === query.variables.input.id);
             item.isDownloaded = true;
-            return Response.json({ data: { enqueueChapterDownload: { downloadStatus: { state: 'STARTED' } } } });
+            return Response.json({
+                data: { enqueueChapterDownload: { downloadStatus: { state: 'STARTED' } } },
+            });
         }
         assert.equal(url.hostname, '127.0.0.1');
         assert.equal(url.port, '18083');
         if (url.pathname === '/healthz')
-            return Response.json({ status: 'ok', model: CLOUD_MODEL, credentials: { google: true, openai: true } });
+            return Response.json({
+                status: 'ok',
+                model: CLOUD_MODEL,
+                credentials: { google: true, openai: true },
+            });
         assert.equal(input.headers.Authorization, 'Bearer ' + token);
         assert(!JSON.stringify(input.headers).includes(user.headers.authorization));
         if (url.pathname === '/v1/jobs' && method === 'GET') return Response.json({ jobs: [] });
@@ -112,10 +120,15 @@ async function fixture(t, options = {}) {
             assert.equal(Buffer.concat(chunks).length, Number(input.headers['Content-Length']));
             const id = input.headers['Idempotency-Key'];
             assert(!states.has(id), 'No implicit duplicate submission');
+            if (rejected) {
+                rejected = false;
+                return Response.json({ error: 'Defekte TIFF-Datei. ' + token }, { status: 400 });
+            }
             states.set(id, {
                 id,
                 model: CLOUD_MODEL,
-                pages: 2,
+                pages: options.expanded ? 3 : 2,
+                source_entries: 2,
                 status: options.running ? 'running' : 'completed_with_retained_regions',
                 summary: {
                     open_regions: 1,
@@ -138,7 +151,7 @@ async function fixture(t, options = {}) {
             if (++cancelPolls >= 2) state.status = 'cancelled';
             return Response.json(reply);
         }
-        if (match[2] === 'result.cbz') return new Response(options.badZip ? zip(['../escape.png']) : resultZip);
+        if (match[2] === 'result.cbz') return new Response(options.badZip ? zip(['../escape.png']) : outputZip);
         if (match[2] === 'resume') state.status = 'completed_with_retained_regions';
         if (match[2] === 'cancel') state.status = options.delayedCancel ? 'cancelling' : 'cancelled';
         return Response.json(state);
@@ -229,6 +242,42 @@ test('Same batch request is idempotent and refuses changed selection or budget',
     assert.equal(uploads(f).length, 1);
     await assert.rejects(f.service.start({ ...input, chapterIds: [2] }, user), /anderen Auswahl/);
     await assert.rejects(f.service.start({ ...input, maxOpenAI: 1 }, user), /Anfragegrenze/);
+});
+test('Multipage documents import all output pages while source identity keeps the original file count', async (t) => {
+    const f = await fixture(t, { expanded: true });
+    const id = randomUUID();
+    await f.service.start({ requestId: id, chapterIds: [1], consent: true }, user);
+    const batch = await until(async () => {
+        const b = await f.service.get(id, false);
+        return b.phase === 'completed_with_retained_regions' ? b : false;
+    });
+    const item = batch.chapters[0];
+    assert.equal(item.pageCount, 2);
+    assert.equal(item.outputPageCount, 3);
+    const available = await f.service.available(1, f.chapters[0]);
+    assert.equal(available.pageCount, 3);
+    assert.equal(available.pages.length, 3);
+    assert.deepEqual(await fs.readFile((await f.service.file(id, item.id, 2)).path), png);
+    await assert.rejects(f.service.file(id, item.id, 3), /Seite/);
+    assert.equal((await f.service.plan({ chapterIds: [1] }, user)).alreadyTranslated, 1);
+});
+test('A rejected input exposes its diagnostic without the control token; explicit resume reuses the cached source and UUID', async (t) => {
+    const f = await fixture(t, { rejectFirst: true });
+    const id = randomUUID();
+    await f.service.start({ requestId: id, chapterIds: [1], consent: true }, user);
+    const failed = await until(async () => {
+        const b = await f.service.get(id, false);
+        return b.phase === 'failed' ? b : false;
+    });
+    assert.match(failed.message, /HTTP 400.*Defekte TIFF-Datei/);
+    assert(!failed.message.includes(f.token));
+    const itemId = failed.chapters[0].id;
+    assert.equal(f.states.size, 0);
+    await f.service.resume({ id, consent: true }, user);
+    await until(async () => (await f.service.get(id, false)).phase === 'completed_with_retained_regions');
+    assert.equal([...f.states.keys()][0], itemId);
+    assert.equal(f.calls.filter((c) => c.kind === 'archive').length, 1);
+    assert.equal(uploads(f).length, 2);
 });
 test('Lost submission response never automatically reposts; explicit resume finds the same remote UUID', async (t) => {
     const f = await fixture(t, { lost: true });
@@ -350,7 +399,9 @@ test('Paid AI search cannot start alongside an active cloud batch and works agai
         manifest: {},
         configLoader: async () => ({ origins: ['https://reader.example'] }),
         fetchImpl: async () =>
-            Response.json({ data: { settings: { authMode: 'BASIC_AUTH' }, aboutServer: { version: 'v2.4.2366' } } }),
+            Response.json({
+                data: { settings: { authMode: 'BASIC_AUTH' }, aboutServer: { version: 'v2.4.2366' } },
+            }),
         cloudTranslationService: { busy: () => busy, stop: async () => {} },
         translationService: { busy: () => false, stop: async () => {} },
         aiService: {

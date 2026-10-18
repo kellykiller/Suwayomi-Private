@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { assert, readJson, writeJson, exists } from './common.mjs';
 import { exportSelection } from './library-export.mjs';
+import { boundedText } from './log-utils.mjs';
 
 export const CLOUD_MODEL = 'gpt-6-astra';
 export const cloudId = (id) =>
@@ -51,6 +52,7 @@ export function createCloudTranslationService({
     pollMs = 2000,
     updateBusy = async () => null,
     otherBusy = () => false,
+    logs,
 } = {}) {
     const target = new URL(serviceUrl);
     assert(
@@ -114,8 +116,20 @@ export function createCloudTranslationService({
             await response.body?.cancel();
             return null;
         }
-        if (!response.ok) await response.body?.cancel();
-        assert(response.ok, `Cloud-Dienst: HTTP ${response.status}. Auftrag pruefen; keine automatische Wiederholung.`);
+        if (!response.ok) {
+            let detail = '';
+            try {
+                const body = JSON.parse(await boundedText(response, 4096));
+                if (typeof body.error === 'string')
+                    detail = body.error
+                        .replaceAll(await token(), '[TOKEN]')
+                        .replace(/[\u0000-\u001f\u007f]/g, ' ')
+                        .slice(0, 350);
+            } catch {}
+            throw new Error(
+                `Cloud-Dienst: HTTP ${response.status}.${detail ? ' ' + detail : ''} Auftrag pruefen; keine automatische Wiederholung.`,
+            );
+        }
         return response;
     }
     async function remote(id, signal) {
@@ -123,7 +137,16 @@ export function createCloudTranslationService({
         if (!response) return null;
         const result = await response.json();
         assert(
-            result.id === id && result.model === CLOUD_MODEL && typeof result.status === 'string',
+            result.id === id &&
+                result.model === CLOUD_MODEL &&
+                typeof result.status === 'string' &&
+                Number.isInteger(result.pages) &&
+                result.pages >= 1 &&
+                result.pages <= 100 &&
+                (result.source_entries === undefined ||
+                    (Number.isInteger(result.source_entries) &&
+                        result.source_entries >= 1 &&
+                        result.source_entries <= 100)),
             'Cloud-Auftragsantwort passt nicht zur Anfrage.',
         );
         return result;
@@ -165,7 +188,10 @@ export function createCloudTranslationService({
         );
         for (const chapter of value.chapters) {
             const previous = previousChapters.get(identity(chapter));
-            chapters.push({ ...chapter, alreadyTranslated: !!previous && previous.pageCount === chapter.pageCount });
+            chapters.push({
+                ...chapter,
+                alreadyTranslated: !!previous && previous.pageCount === chapter.pageCount,
+            });
         }
         const pending = chapters.filter((c) => !c.alreadyTranslated);
         assert(
@@ -237,6 +263,7 @@ export function createCloudTranslationService({
                     ? 'Angehalten. Gespeicherte Antworten bleiben erhalten.'
                     : String(error.message).slice(0, 500);
                 await save(batch);
+                await logs?.write('translation', 'ERROR', batch.message, batch.id);
             })
             .finally(() => {
                 if (task === current) task = undefined;
@@ -261,7 +288,10 @@ export function createCloudTranslationService({
             );
             let state = await remote(item.id, signal);
             if (state)
-                assert(state.pages === item.pageCount, 'Gespeicherter Cloud-Auftrag hat eine andere Seitenanzahl.');
+                assert(
+                    (state.source_entries ?? state.pages) === item.pageCount,
+                    'Gespeicherter Cloud-Auftrag hat eine andere Anzahl Quelldateien.',
+                );
             if (!state) {
                 item.status = 'preparing';
                 await save(batch);
@@ -314,7 +344,12 @@ export function createCloudTranslationService({
                     );
                     state = await response.json();
                     assert(
-                        state.id === item.id && state.pages === item.pageCount && state.model === CLOUD_MODEL,
+                        state.id === item.id &&
+                            (state.source_entries ?? state.pages) === item.pageCount &&
+                            Number.isInteger(state.pages) &&
+                            state.pages >= 1 &&
+                            state.pages <= 100 &&
+                            state.model === CLOUD_MODEL,
                         'Cloud-Eingang passt nicht zum Kapitel.',
                     );
                 } finally {
@@ -336,6 +371,7 @@ export function createCloudTranslationService({
                 }
             }
             item.remoteStatus = state.status;
+            item.outputPageCount = state.pages;
             item.status = 'processing';
             await save(batch);
             while (remoteActive(state.status)) {
@@ -371,7 +407,7 @@ export function createCloudTranslationService({
                 await fs.rename(path + '/result.tmp', path + '/kapitel-de.cbz');
             }
             await fs.rm(path + '/pages.tmp', { recursive: true, force: true });
-            await extract(path, item.pageCount, signal);
+            await extract(path, item.outputPageCount, signal);
             await fs.rm(path + '/pages', { recursive: true, force: true });
             await fs.rename(path + '/pages.tmp', path + '/pages');
             item.outputReady = true;
@@ -540,9 +576,9 @@ export function createCloudTranslationService({
         return {
             id: item.id,
             revision: item.revision,
-            translatedPages: item.pageCount,
-            pageCount: item.pageCount,
-            pages: Array.from({ length: item.pageCount }, (_, i) => `${prefix}/page/${i}`),
+            translatedPages: item.outputPageCount ?? item.pageCount,
+            pageCount: item.outputPageCount ?? item.pageCount,
+            pages: Array.from({ length: item.outputPageCount ?? item.pageCount }, (_, i) => `${prefix}/page/${i}`),
         };
     }
     async function file(batchId, itemId, page) {
@@ -551,8 +587,14 @@ export function createCloudTranslationService({
         assert(item?.outputReady && cloudId(itemId), 'Fertiges Kapitel nicht gefunden.');
         const path = directory(batchId) + '/' + itemId;
         if (page === null) return { path: path + '/kapitel-de.cbz', type: 'application/vnd.comicbook+zip' };
-        assert(Number.isInteger(page) && page >= 0 && page < item.pageCount, 'Ungueltige Seite.');
-        return { path: path + '/pages/' + String(page + 1).padStart(4, '0') + '.png', type: 'image/png' };
+        assert(
+            Number.isInteger(page) && page >= 0 && page < (item.outputPageCount ?? item.pageCount),
+            'Ungueltige Seite.',
+        );
+        return {
+            path: path + '/pages/' + String(page + 1).padStart(4, '0') + '.png',
+            type: 'image/png',
+        };
     }
     const exclusive =
         (fn) =>

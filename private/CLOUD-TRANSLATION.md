@@ -1,7 +1,34 @@
-# Automatische Cloud-Uebersetzung (Private 0.5.0)
+# Automatische Cloud-Uebersetzung (Private 0.5.1)
+
+## Bild- und Dokumentformate
+
+Mit Uebersetzerdienst **0.1.2** werden JPG/JPEG, PNG, WebP, AVIF, BMP/DIB,
+GIF, TIFF/TIF, HEIC/HEIF, PDF und weitere Rasterformate (JPEG 2000,
+PPM/PGM/PBM/PNM, TGA, PCX, ICO) unterstuetzt. Die Alias-Endung `.giff`
+wird ebenfalls erkannt. Der Exportadapter uebergibt die Originaldateien;
+der Uebersetzungsdienst dekodiert und normalisiert sie lokal vor der OCR.
+
+Mehrseitige TIFFs, PDFs und HEIF-Sammlungen werden vollstaendig aufgeteilt.
+Der Gateway unterscheidet Quelldateien von Ausgabeseiten und stellt alle
+fertigen Seiten im deutschen Leser sowie in der CBZ bereit. Bei Animationen
+(GIF, WebP, AVIF, PNG) wird das erste vollstaendige Bild verarbeitet. PDFs
+werden normalerweise mit 300 dpi innerhalb der Dienst-Pixelgrenzen gerendert.
+Die Originaldateien bleiben erhalten. API-Budgets richten sich nach den
+tatsaechlichen Dokumentseiten; maximal 100 Ausgabeseiten je Kapitel.
+
+Der Dialog verarbeitet weiterhin Suwayomis Kapitel. Dieses Update ergaenzt
+keinen separaten Browser-Dateiupload fuer beliebige lokale Dokumente. Der
+separate Dienst akzeptiert einzelne Bilder/PDFs auch direkt ueber seine lokale
+API oder den Pipeline-Aufruf.
+
+Dienst 0.1.2 zuerst installieren, danach dieses Gateway-Update. Gespeicherte
+Schluessel, Zugriffstoken und Auftraege bleiben erhalten. Der bisherige
+AVIF-Fehler kann durch explizites Fortsetzen desselben Auftrags behoben werden.
+Neue lokale Eingabefehler werden mit ihrem konkreten Fehlertext angezeigt und
+im Uebersetzungsprotokoll festgehalten; der interne Token wird ausgeblendet.
 
 Die private Oberflaeche verbindet sich mit dem separat installierten Dienst
-`suwayomi-cloud-translator:0.1.0` auf `127.0.0.1:18083`. Der getestete
+`suwayomi-cloud-translator:0.1.2` auf `127.0.0.1:18083`. Der getestete
 Kapitel-Uebersetzer mit automatischer Ausnahmepruefung bleibt unveraendert.
 Google Cloud Vision uebernimmt OCR, OpenAI (`gpt-6-astra`) Bildpruefung und
 Uebersetzung mit Kapitelkontext. Retusche und Textsatz laufen im CPU-Dienst
@@ -29,7 +56,7 @@ bleiben beim Uebersetzungsdienst. Keine Stack-Aenderung, kein neuer Port und
 keine weitere Volume-Freigabe erforderlich. Bei Austausch des internen Tokens
 im Dienst den Kopierschritt wiederholen. Niemals Tokenwerte in Chat/Logs posten.
 
-Anschliessend in **Einstellungen > Private Updates** Version 0.5.0 installieren
+Anschliessend in **Einstellungen > Private Updates** Version 0.5.1 installieren
 und die Seite neu laden. Unter **Kapiteluebersetzung** erscheint der automatische
 Ablauf. Ein gespeicherter Schluessel bedeutet noch keinen bestaetigten Zugang
 zum Cloud-Anbieter; dies prueft erst eine ausdruecklich gestartete Verarbeitung.
@@ -58,7 +85,7 @@ zum Cloud-Anbieter; dies prueft erst eine ausdruecklich gestartete Verarbeitung.
 ## Fortsetzen und Daten
 
 Ein Gateway verarbeitet eine Auswahl zur Zeit und deren Kapitel nacheinander.
-Maximal 1000 Kapitel pro Auswahl; die Dienstgrenzen von 1–100 PNG/JPG/WebP-Seiten
+Maximal 1000 Kapitel pro Auswahl; die Dienstgrenzen von 1–100 Ausgabeseiten
 und 256 MiB Eingang je Kapitel bleiben bestehen. Maximal 300 gespeicherte Auswahlen
 und 5000 gespeicherte Kapitelreferenzen begrenzen den Arbeitsspeicherbedarf.
 
