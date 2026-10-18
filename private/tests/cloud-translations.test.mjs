@@ -66,6 +66,7 @@ async function fixture(t, options = {}) {
         calls = [],
         services = [];
     let lost = !!options.lost;
+    let cancelPolls = 0;
     const libraryExports = {
         plan: async (selection) => {
             const list = selection.chapterIds?.length
@@ -132,9 +133,14 @@ async function fixture(t, options = {}) {
         assert(match, 'Only known local API endpoints');
         const state = states.get(match[1]);
         if (!state) return Response.json({ error: 'missing' }, { status: 404 });
+        if (!match[2] && state.status === 'cancelling') {
+            const reply = { ...state };
+            if (++cancelPolls >= 2) state.status = 'cancelled';
+            return Response.json(reply);
+        }
         if (match[2] === 'result.cbz') return new Response(options.badZip ? zip(['../escape.png']) : resultZip);
         if (match[2] === 'resume') state.status = 'completed_with_retained_regions';
-        if (match[2] === 'cancel') state.status = 'cancelled';
+        if (match[2] === 'cancel') state.status = options.delayedCancel ? 'cancelling' : 'cancelled';
         return Response.json(state);
     };
     const create = () => {
@@ -251,11 +257,12 @@ test('Gateway restart makes no automatic API submission and explicit resume reus
     assert.equal(uploads(f).length, 1);
 });
 test('Explicit cancel targets the submitted remote job; cancelled chapter must resume instead of becoming a duplicate job', async (t) => {
-    const f = await fixture(t, { running: true });
+    const f = await fixture(t, { running: true, delayedCancel: true });
     const id = randomUUID();
     await f.service.start({ requestId: id, chapterIds: [1], consent: true }, user);
     await until(() => uploads(f).length === 1);
     assert.equal((await f.service.cancel(id)).phase, 'cancelled');
+    assert.equal([...f.states.values()][0].status, 'cancelling');
     assert.equal(f.calls.filter((c) => c.path?.endsWith('/cancel')).length, 1);
     await assert.rejects(
         f.service.start({ requestId: randomUUID(), chapterIds: [1], consent: true }, user),
@@ -335,6 +342,44 @@ test('Cloud routes require Suwayomi Basic authentication and same-origin POST; c
     headers.Origin = 'https://reader.example';
     assert.equal((await fetch(url, { method: 'POST', headers, body: '{}' })).status, 202);
     assert.equal(starts, 1);
+});
+test('Paid AI search cannot start alongside an active cloud batch and works again when the batch ends', async (t) => {
+    let busy = true,
+        searches = 0;
+    const gateway = createGateway({
+        manifest: {},
+        configLoader: async () => ({ origins: ['https://reader.example'] }),
+        fetchImpl: async () =>
+            Response.json({ data: { settings: { authMode: 'BASIC_AUTH' }, aboutServer: { version: 'v2.4.2366' } } }),
+        cloudTranslationService: { busy: () => busy, stop: async () => {} },
+        translationService: { busy: () => false, stop: async () => {} },
+        aiService: {
+            start: async () => {
+                searches++;
+                return { id: 'fixture' };
+            },
+            stop: async () => {},
+        },
+        logService: { write: async () => {} },
+    });
+    await new Promise((r) => gateway.listen(0, '127.0.0.1', r));
+    t.after(() => new Promise((r) => gateway.close(r)));
+    const url = `http://127.0.0.1:${gateway.address().port}/private-api/ai/search`;
+    const options = {
+        method: 'POST',
+        headers: {
+            Authorization: user.headers.authorization,
+            Origin: 'https://reader.example',
+            'Content-Type': 'application/json',
+            'X-Suwayomi-Private': '1',
+        },
+        body: '{}',
+    };
+    assert.equal((await fetch(url, options)).status, 400);
+    assert.equal(searches, 0);
+    busy = false;
+    assert.equal((await fetch(url, options)).status, 202);
+    assert.equal(searches, 1);
 });
 test('Cloud batch is visible and cancellable in central tasks independently of its originating browser', async () => {
     const id = randomUUID();

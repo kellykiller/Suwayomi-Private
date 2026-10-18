@@ -320,11 +320,20 @@ export function createCloudTranslationService({
                 } finally {
                     source.destroy();
                 }
-            } else if (!completed(state.status) && !remoteActive(state.status)) {
+            } else if (state.status === 'cancelling' || (!completed(state.status) && !remoteActive(state.status))) {
                 // run() is entered only by an explicit start/resume action, never by a status read.
-                const resumed = await request('/v1/jobs/' + item.id + '/resume', { method: 'POST' }, signal);
-                await resumed.body?.cancel();
-                state = await remote(item.id, signal);
+                while (state.status === 'cancelling') {
+                    item.remoteStatus = state.status;
+                    await save(batch);
+                    await wait(pollMs, signal);
+                    state = await remote(item.id, signal);
+                    assert(state, 'Cloud-Auftrag fehlt.');
+                }
+                if (!completed(state.status) && !remoteActive(state.status)) {
+                    const resumed = await request('/v1/jobs/' + item.id + '/resume', { method: 'POST' }, signal);
+                    await resumed.body?.cancel();
+                    state = await remote(item.id, signal);
+                }
             }
             item.remoteStatus = state.status;
             item.status = 'processing';

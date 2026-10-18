@@ -427,7 +427,7 @@ export function createGateway({
                     if (url.pathname === '/private-api/ai/test') return json(res, 200, await ai.testConnection());
                     if (url.pathname === '/private-api/ai/search') {
                         assert(
-                            !translations.busy(),
+                            !translations.busy() && !cloud.busy(),
                             'Bitte die Kapitelverarbeitung vor einer weiteren KI-Suche abwarten.',
                         );
                         return json(res, 202, await startAiAction(() => ai.start(input, req)));
