@@ -135,6 +135,10 @@ async function fixture(t, options = {}) {
                     fetchImpl,
                     wait,
                 }).catch(() => {});
+                if (options.quickHelper) {
+                    await helperTask;
+                    values.delete(c.Id);
+                }
             }
             return null;
         }
@@ -347,8 +351,8 @@ test('A single existing update action bootstraps the translator and does not lau
     assert.equal(helper.HostConfig.AutoRemove, true);
     assert(!helper.HostConfig.Binds.some((value) => value.startsWith(TRANSLATOR_ROOT)));
 });
-test('An already created helper is started and reused instead of creating a duplicate', async (t) => {
-    const f = await fixture(t);
+test('An already created helper is reused even when it finishes and auto-removes before start returns', async (t) => {
+    const f = await fixture(t, { quickHelper: true });
     await f.saveJob();
     f.values.set(helperId, {
         Id: helperId,
@@ -365,6 +369,33 @@ test('An already created helper is started and reused instead of creating a dupl
     const b = f.bootstrap();
     await b.start();
     assert.equal(b.status().ready, true);
+    assert(!f.calls.some((c) => c.path.includes('containers/create?name=suwayomi-translator-update-')));
+});
+test('A helper completing between receipt read and inspect cannot have its result overwritten', async (t) => {
+    const f = await fixture(t);
+    await f.saveJob();
+    await fs.mkdir(f.root + '/translator-updates');
+    await fs.writeFile(
+        f.root + '/translator-updates/' + f.id + '.json',
+        JSON.stringify({ id: f.id, targetImage, version: '0.1.2', workerId: helperId, status: 'testing' }),
+    );
+    const api = async (path, input) => {
+        if (path.endsWith('/containers/' + helperId + '/json')) {
+            await f.run();
+            return null;
+        }
+        return f.api(path, input);
+    };
+    const b = translatorBootstrap({
+        root: f.root,
+        manifest,
+        connection: async () => ({ config, api }),
+        fetchImpl: f.fetchImpl,
+        wait,
+    });
+    await b.start();
+    assert.equal(b.status().ready, true);
+    assert.equal((await f.record()).status, 'succeeded');
     assert(!f.calls.some((c) => c.path.includes('containers/create?name=suwayomi-translator-update-')));
 });
 test('Wrong Docker daemon or failed helper prevents the new UI from claiming readiness', async (t) => {

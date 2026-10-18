@@ -366,6 +366,7 @@ export function translatorBootstrap({ manifest, root = '/update', connection, fe
                             worker.Image === ui.Image && worker.Config.Labels?.[marker] === job.id,
                             'Vorhandener Dienst-Updatehelfer gehoert zu einem anderen Auftrag.',
                         );
+                    let launch = worker?.State.Status !== 'running';
                     if (worker?.State.Status === 'created') {
                         record = {
                             ...record,
@@ -376,9 +377,13 @@ export function translatorBootstrap({ manifest, root = '/update', connection, fe
                         };
                         await writeJson(file, record);
                         await api(path(config, 'containers/' + worker.Id + '/start'), { method: 'POST' });
-                        worker = await inspect(api, config, worker.Id);
+                        launch = false;
                     }
-                    if (worker?.State.Status !== 'running') {
+                    // A fast helper may finish and auto-remove between the first
+                    // receipt read and Docker inspect. Never overwrite its result.
+                    record = (await exists(file)) ? await readJson(file) : null;
+                    if (record?.status === 'failed') throw new Error(record.message);
+                    if (launch && record?.status !== 'succeeded') {
                         if (worker)
                             await api(path(config, 'containers/' + worker.Id + '?force=1&v=0'), { method: 'DELETE' });
                         const request = {
