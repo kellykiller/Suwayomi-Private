@@ -374,11 +374,12 @@ async function fixture(t) {
     });
     return { url, auth };
 }
-test('The private UI preserves native authentication and never returns saved keys in its status', async (t) => {
+test('The private UI offers the login form, preserves verified native credentials and never returns saved keys', async (t) => {
     const f = await fixture(t);
     const missing = await fetch(f.url + '/settings/private-updates');
-    assert.equal(missing.status, 401);
-    assert.equal(missing.headers.get('www-authenticate'), 'Basic realm="fixture"');
+    assert.equal(missing.status, 200);
+    assert.equal(missing.headers.get('www-authenticate'), null);
+    assert.match(await missing.text(), /autocomplete="current-password"/);
     assert.equal(
         await (await fetch(f.url + '/settings/private-updates', { headers: { Authorization: f.auth } })).text(),
         'PRIVATE-UI',

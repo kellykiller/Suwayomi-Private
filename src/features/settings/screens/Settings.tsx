@@ -25,6 +25,8 @@ import SystemUpdateAltIcon from '@mui/icons-material/SystemUpdateAlt';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import TranslateIcon from '@mui/icons-material/Translate';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import ListItemButton from '@mui/material/ListItemButton';
 import { useLingui } from '@lingui/react/macro';
 import { ListItemLink } from '@/base/components/lists/ListItemLink.tsx';
 import { AppRoutes } from '@/base/AppRoute.constants.ts';
@@ -37,6 +39,12 @@ export function Settings() {
 
     return (
         <List sx={{ padding: 0 }}>
+            <ListItemButton component="a" href="/auth/account">
+                <ListItemIcon>
+                    <AccountCircleIcon />
+                </ListItemIcon>
+                <ListItemText primary="Anmeldung und Abmelden" />
+            </ListItemButton>
             <ListItemLink to={AppRoutes.settings.children.appearance.path}>
                 <ListItemIcon>
                     <PaletteIcon />

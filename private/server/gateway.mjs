@@ -33,6 +33,7 @@ import { createLibraryExportService } from './library-export.mjs';
 import { createCloudTranslationService } from './cloud-translations.mjs';
 import { createLogStore, LOG_CATEGORIES } from './logs.mjs';
 import { translatorBootstrap } from './translator-update.mjs';
+import { createBrowserAuth, upstreamCookies } from './browser-auth.mjs';
 
 const hop = new Set([
     'connection',
@@ -142,6 +143,7 @@ export function createGateway({
     cloudTranslationService,
     logService,
     componentUpdate = { status: () => ({ ready: true }) },
+    sessionStore,
 } = {}) {
     const target = new URL(upstream);
     assert(
@@ -154,6 +156,15 @@ export function createGateway({
         return { config, api: portainerClient(config.portainerUrl, keys.portainer, fetchImpl) };
     };
     const logs = logService || createLogStore({ connection });
+    const sessionSockets = new Map();
+    const browserAuth = createBrowserAuth({
+        store: sessionStore,
+        authenticate: (req) => authenticate(req, target, fetchImpl),
+        configLoader,
+        onLogout: (token) => {
+            for (const socket of sessionSockets.get(token) || []) socket.destroy();
+        },
+    });
     const ai = aiService || createAiService({ upstream: target, fetchImpl, logs });
     const translations =
         translationService ||
@@ -221,14 +232,42 @@ export function createGateway({
                     translator: component.status,
                 });
             }
+            if (req.method === 'GET' && url.pathname === '/auth/client.js') {
+                res.writeHead(200, {
+                    'Content-Type': 'application/javascript',
+                    'Cache-Control': 'no-store',
+                    'X-Content-Type-Options': 'nosniff',
+                });
+                res.end(
+                    `(()=>{const original=window.fetch;window.fetch=async function(input,options){const response=await original.call(this,input,options);const url=new URL(input instanceof Request?input.url:input,location.href);if(response.status===401&&url.origin===location.origin&&/^\\/(?:api|private-api)(?:\\/|$)/.test(url.pathname))location.replace('/auth/login?next='+encodeURIComponent(location.pathname+location.search+location.hash));return response;};})();`,
+                );
+                return;
+            }
+            const session = await browserAuth.resolve(req);
+            if (await browserAuth.handle(req, res, url, session)) return;
             if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
                 const outgoing = http.request(
                     new URL(req.url, target),
                     { method: req.method, headers: proxyHeaders(req.headers, target) },
-                    (incoming) => {
+                    async (incoming) => {
+                        if (incoming.statusCode === 401) {
+                            incoming.resume();
+                            try {
+                                await browserAuth.store.revoke(session.token);
+                            } catch {
+                                res.destroy();
+                                return;
+                            }
+                            browserAuth.unauthorized(req, res, session);
+                            return;
+                        }
                         res.writeHead(
                             incoming.statusCode,
-                            Object.fromEntries(Object.entries(incoming.headers).filter(([key]) => !hop.has(key))),
+                            Object.fromEntries(
+                                Object.entries(incoming.headers).filter(
+                                    ([key]) => !hop.has(key) && key !== 'www-authenticate',
+                                ),
+                            ),
                         );
                         incoming.pipe(res);
                     },
@@ -243,8 +282,8 @@ export function createGateway({
             }
             const user = await authenticate(req, target, fetchImpl);
             if (!user.authorized) {
-                res.writeHead(401, { 'WWW-Authenticate': user.challenge, 'Cache-Control': 'no-store' });
-                res.end('Anmeldung bei Suwayomi erforderlich.');
+                await browserAuth.store.revoke(session.token);
+                browserAuth.unauthorized(req, res, session);
                 return;
             }
             if (url.pathname.startsWith('/private-api/')) {
@@ -573,9 +612,16 @@ export function createGateway({
                 path = resolve(webRoot, 'index.html');
                 info = await fs.stat(path);
             }
+            let html;
+            if (extname(path) === '.html') {
+                html = (await fs.readFile(path, 'utf8')).replace(
+                    /<head(?:\s[^>]*)?>/i,
+                    '$&<script src="/auth/client.js"></script>',
+                );
+            }
             res.writeHead(200, {
                 'Content-Type': types[extname(path)] || 'application/octet-stream',
-                'Content-Length': info.size,
+                'Content-Length': html === undefined ? info.size : Buffer.byteLength(html),
                 'Cache-Control':
                     extname(path) === '.html' || ['sw.js', 'registerSW.js'].some((name) => path.endsWith(sep + name))
                         ? 'no-store'
@@ -583,6 +629,7 @@ export function createGateway({
                 'X-Content-Type-Options': 'nosniff',
             });
             if (req.method === 'HEAD') res.end();
+            else if (html !== undefined) res.end(html);
             else
                 createReadStream(path)
                     .on('error', () => res.destroy())
@@ -611,38 +658,70 @@ export function createGateway({
     server.on('close', () => {
         void server.shutdownPrivate();
     });
-    server.on('upgrade', (req, socket, head) => {
-        if (!req.url.startsWith('/api/')) {
+    server.on('upgrade', async (req, socket, head) => {
+        try {
+            if (!req.url.startsWith('/api/') || req.url.startsWith('//') || req.url.includes('\\')) {
+                socket.destroy();
+                return;
+            }
+            const config = await configLoader();
+            if (req.headers.origin && !config.origins.includes(req.headers.origin)) {
+                socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+                return;
+            }
+            const session = await browserAuth.resolve(req);
+            const outgoing = http.request(new URL(req.url, target), {
+                headers: { ...req.headers, cookie: upstreamCookies(req.headers.cookie), host: target.host },
+            });
+            outgoing.on('upgrade', (incoming, backend, buffer) => {
+                if (session.session) {
+                    let sockets = sessionSockets.get(session.token);
+                    if (!sockets) {
+                        sockets = new Set();
+                        sessionSockets.set(session.token, sockets);
+                    }
+                    sockets.add(socket);
+                    const timer = setInterval(() => {
+                        void browserAuth.store
+                            .read(session.token)
+                            .then((value) => {
+                                if (!value) socket.destroy();
+                            })
+                            .catch(() => socket.destroy());
+                    }, 60000);
+                    timer.unref();
+                    socket.on('close', () => {
+                        clearInterval(timer);
+                        sockets.delete(socket);
+                        if (!sockets.size) sessionSockets.delete(session.token);
+                    });
+                }
+                socket.write(
+                    'HTTP/1.1 101 Switching Protocols\r\n' +
+                        Object.entries(incoming.headers)
+                            .map(([key, value]) => key + ': ' + value)
+                            .join('\r\n') +
+                        '\r\n\r\n',
+                );
+                if (head.length) backend.write(head);
+                if (buffer.length) socket.write(buffer);
+                backend.on('error', () => socket.destroy());
+                socket.on('error', () => backend.destroy());
+                socket.on('close', () => backend.destroy());
+                backend.on('close', () => socket.destroy());
+                socket.pipe(backend).pipe(socket);
+            });
+            outgoing.on('response', (response) => {
+                socket.write(
+                    'HTTP/1.1 ' + response.statusCode + ' ' + response.statusMessage + '\r\nConnection: close\r\n\r\n',
+                );
+                socket.destroy();
+            });
+            outgoing.on('error', () => socket.destroy());
+            outgoing.end();
+        } catch {
             socket.destroy();
-            return;
         }
-        const outgoing = http.request(new URL(req.url, target), {
-            headers: { ...req.headers, host: target.host },
-        });
-        outgoing.on('upgrade', (incoming, backend, buffer) => {
-            socket.write(
-                'HTTP/1.1 101 Switching Protocols\r\n' +
-                    Object.entries(incoming.headers)
-                        .map(([key, value]) => key + ': ' + value)
-                        .join('\r\n') +
-                    '\r\n\r\n',
-            );
-            if (head.length) backend.write(head);
-            if (buffer.length) socket.write(buffer);
-            backend.on('error', () => socket.destroy());
-            socket.on('error', () => backend.destroy());
-            socket.on('close', () => backend.destroy());
-            backend.on('close', () => socket.destroy());
-            socket.pipe(backend).pipe(socket);
-        });
-        outgoing.on('response', (response) => {
-            socket.write(
-                'HTTP/1.1 ' + response.statusCode + ' ' + response.statusMessage + '\r\nConnection: close\r\n\r\n',
-            );
-            socket.destroy();
-        });
-        outgoing.on('error', () => socket.destroy());
-        outgoing.end();
     });
     return server;
 }

@@ -29,6 +29,17 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm test
+      - name: Verify native login forms and responsive layouts in Chrome
+        run: |
+          npm install --prefix /tmp/suwayomi-login-browser --no-package-lock --ignore-scripts playwright@1.62.1
+          LOGIN_PLAYWRIGHT=/tmp/suwayomi-login-browser node private/tests/browser-login.smoke.mjs
+      - name: Save empty login form previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-login-previews
+          path: /tmp/suwayomi-login-previews/*.png
+          if-no-files-found: ignore
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -45,6 +56,8 @@ jobs:
         run: docker run --rm --network none --read-only --cap-drop=ALL --security-opt=no-new-privileges:true --user=10001:10001 --memory=3g --tmpfs /tmp:rw,nosuid,nodev,size=3g,mode=1777 -e PYTHONHOME=/opt/translator-runtime -e LD_LIBRARY_PATH=/opt/translator-runtime/lib -e PYTHONDONTWRITEBYTECODE=1 -e HOME=/tmp -e OMP_NUM_THREADS=1 -e OPENBLAS_NUM_THREADS=1 --entrypoint /opt/translator-runtime/bin/python3.12 suwayomi-private:ci -m unittest discover -s /app/private/cloud-translator/tests -v
       - name: Verify library export in a read-only container with the writable NAS mount
         run: docker run --rm --network none --read-only --cap-drop=ALL --security-opt=no-new-privileges:true --memory=256m --tmpfs /update:rw,noexec,nosuid,size=32m -e TMPDIR=/update -e PYTHONDONTWRITEBYTECODE=1 --entrypoint node suwayomi-private:ci --test private/tests/library-export.test.mjs
+      - name: Verify browser sessions in the read-only production container
+        run: docker run --rm --network none --read-only --cap-drop=ALL --security-opt=no-new-privileges:true --memory=256m --tmpfs /tmp:rw,noexec,nosuid,size=32m --entrypoint node suwayomi-private:ci --test private/tests/browser-auth.test.mjs
       - run: |
           ocr_ci_cpus=$(getconf _NPROCESSORS_ONLN)
           if [ "$ocr_ci_cpus" -gt 4 ]; then ocr_ci_cpus=4; fi
