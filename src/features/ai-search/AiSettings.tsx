@@ -30,10 +30,14 @@ export function AiSettings() {
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
     const [pending, setPending] = useState(false);
+    const [resultCount, setResultCount] = useState('');
     useEffect(() => {
         const controller = new AbortController();
         void aiApi<AiSettingsData>('settings', undefined, controller.signal)
-            .then(setSettings)
+            .then((value) => {
+                setSettings(value);
+                setResultCount(String(value.resultCount));
+            })
             .catch((reason: Error) => {
                 if (!controller.signal.aborted) {
                     setError(reason.message);
@@ -115,22 +119,40 @@ export function AiSettings() {
                             <MenuItem value="medium">{t`Medium`}</MenuItem>
                         </TextField>
                         <TextField
-                            select
                             label={t`Maximum recommendations`}
-                            value={settings.resultCount}
+                            type="number"
+                            value={resultCount}
                             disabled={pending}
-                            onChange={(event) => setSettings({ ...settings, resultCount: Number(event.target.value) })}
-                        >
-                            {[4, 6, 8, 10].map((count) => (
-                                <MenuItem key={count} value={count}>
-                                    {count}
-                                </MenuItem>
-                            ))}
-                        </TextField>
+                            onChange={(event) => setResultCount(event.target.value)}
+                            error={
+                                !!resultCount &&
+                                (!/^\d+$/.test(resultCount) ||
+                                    Number(resultCount) < 1 ||
+                                    Number(resultCount) > (settings.maxResultCount ?? 100))
+                            }
+                            helperText={
+                                'Standard je Antwort: ganze Zahl von 1 bis ' +
+                                (settings.maxResultCount ?? 100) +
+                                '. Im Chat kannst du die Zahl pro Nachricht ändern.'
+                            }
+                            slotProps={{
+                                htmlInput: {
+                                    min: 1,
+                                    max: settings.maxResultCount ?? 100,
+                                    step: 1,
+                                    inputMode: 'numeric',
+                                },
+                            }}
+                        />
                         <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
                             <Button
                                 variant="contained"
-                                disabled={pending}
+                                disabled={
+                                    pending ||
+                                    !/^\d+$/.test(resultCount) ||
+                                    Number(resultCount) < 1 ||
+                                    Number(resultCount) > (settings.maxResultCount ?? 100)
+                                }
                                 onClick={() => {
                                     void execute(async () => {
                                         setSettings(
@@ -138,7 +160,7 @@ export function AiSettings() {
                                                 enabled: settings.enabled,
                                                 model: settings.model,
                                                 reasoning: settings.reasoning,
-                                                resultCount: settings.resultCount,
+                                                resultCount: Number(resultCount),
                                                 key: key.trim(),
                                             }),
                                         );

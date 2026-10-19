@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { createAiService, recommend, titleMatches, validatePlan, chapterMetrics, AI_DEFAULTS } from '../server/ai.mjs';
 import { createGateway } from '../server/gateway.mjs';
 
@@ -96,7 +97,7 @@ async function fixture(t, options = {}) {
         await service.stop();
         await fs.rm(root, { recursive: true, force: true });
     });
-    return { service, root, secrets, calls, modelCalls: () => modelCalls };
+    return { service, root, secrets, calls, fetchImpl, modelCalls: () => modelCalls };
 }
 async function finished(service, id, req = request) {
     for (let i = 0; i < 200; i++) {
@@ -107,6 +108,245 @@ async function finished(service, id, req = request) {
     throw new Error('Fixture search did not finish');
 }
 const input = { prompt: 'Wie One Piece, aber mit mehr Kämpfen', language: 'de', sourceIds: ['1', '2', '3'] };
+
+test('Follow-up requests include the actual user messages and prior ordered suggestions, including verified source observations', async (t) => {
+    const f = await fixture(t);
+    const first = await f.service.start({ ...input, requestId: randomUUID(), resultCount: 7 }, request);
+    const done = await finished(f.service, first.id);
+    const second = await f.service.start(
+        {
+            ...input,
+            prompt: 'Mehr wie der erste Vorschlag, bitte ohne Rückblicke.',
+            conversationId: done.conversationId,
+            parentJobId: done.id,
+            requestId: randomUUID(),
+            resultCount: 3,
+        },
+        request,
+    );
+    await finished(f.service, second.id);
+    const bodies = f.calls.filter((call) => call.url.endsWith('/responses')).map((call) => JSON.parse(call.input.body));
+    assert.equal(bodies.length, 2);
+    assert.deepEqual(
+        bodies[1].input.map((message) => message.role),
+        ['user', 'assistant', 'user'],
+    );
+    assert.equal(bodies[1].input[0].content, input.prompt);
+    const previous = JSON.parse(bodies[1].input[1].content);
+    assert.equal(previous.recommendations[0].title, 'Naruto');
+    assert.equal(previous.recommendations[0].sourceMatches[0].chapterCount, 2);
+    assert.match(bodies[1].input[2].content, /ohne Rückblicke/);
+    assert.equal(bodies[1].text.format.schema.properties.recommendations.maxItems, 3);
+    assert.equal(bodies[1].store, false);
+    const chat = await f.service.conversation(done.conversationId, request);
+    assert.equal(chat.turns.length, 2);
+    assert.equal(chat.turns[0].resultCount, 7);
+    assert.equal(chat.turns[1].resultCount, 3);
+    assert(!JSON.stringify(chat).includes('owner'));
+    assert(!JSON.stringify(chat).includes(request.headers.authorization));
+    const persisted = await fs.readFile(f.root + '/ai-conversations/' + chat.id + '.json', 'utf8');
+    assert(!persisted.includes(key) && !persisted.includes(request.headers.authorization));
+    assert.equal((await fs.stat(f.root + '/ai-conversations/' + chat.id + '.json')).mode & 0o777, 0o600);
+});
+test('Conversation ownership and stale-tab checks run before any further model call', async (t) => {
+    const f = await fixture(t);
+    const a = await finished(f.service, (await f.service.start(input, request)).id);
+    const next = {
+        ...input,
+        prompt: 'Mehr davon',
+        conversationId: a.conversationId,
+        parentJobId: a.id,
+        requestId: randomUUID(),
+    };
+    const foreign = { headers: { authorization: 'Basic other-user' } };
+    assert.equal((await f.service.conversations(foreign)).length, 0);
+    await assert.rejects(f.service.conversation(a.conversationId, foreign), (error) => error.status === 404);
+    await assert.rejects(f.service.start(next, foreign), (error) => error.status === 404);
+    const b = await finished(f.service, (await f.service.start(next, request)).id);
+    await assert.rejects(f.service.start({ ...next, requestId: randomUUID() }, request), /inzwischen/);
+    assert.equal(f.modelCalls(), 2);
+    assert.equal((await f.service.conversation(a.conversationId, request)).turns.at(-1).id, b.id);
+});
+test('An exact retry after a lost response returns the same turn without billing again, even after a service restart', async (t) => {
+    const f = await fixture(t),
+        message = { ...input, requestId: randomUUID(), resultCount: 9 };
+    const first = await finished(f.service, (await f.service.start(message, request)).id);
+    const again = await f.service.start(message, request);
+    assert.equal(again.id, first.id);
+    assert.equal(f.modelCalls(), 1);
+    await assert.rejects(f.service.start({ ...message, prompt: 'different' }, request), /anderen Inhalt/);
+    await f.service.stop();
+    const restarted = createAiService({
+        upstream: 'http://127.0.0.1:18082',
+        stateRoot: f.root,
+        secretRoot: f.secrets,
+        fetchImpl: f.fetchImpl,
+        requestDelay: 0,
+        cooldown: 0,
+    });
+    t.after(() => restarted.stop());
+    assert.equal((await restarted.readJob(first.id, request)).id, first.id);
+    assert.equal((await restarted.start(message, request)).id, first.id);
+    assert.equal(f.modelCalls(), 1);
+    const next = await restarted.start(
+        {
+            ...message,
+            prompt: 'Mehr wie Naruto',
+            conversationId: first.conversationId,
+            parentJobId: first.id,
+            requestId: randomUUID(),
+        },
+        request,
+    );
+    await finished(restarted, next.id);
+    assert.equal((await restarted.conversation(first.conversationId, request)).turns.length, 2);
+    assert.equal(f.modelCalls(), 2);
+});
+test('A reopened interrupted turn preserves known cost and never automatically restarts an API request', async (t) => {
+    const f = await fixture(t);
+    const done = await finished(f.service, (await f.service.start(input, request)).id);
+    await f.service.stop();
+    const path = f.root + '/ai-conversations/' + done.conversationId + '.json';
+    const record = JSON.parse(await fs.readFile(path, 'utf8'));
+    record.turns[0].finished = null;
+    record.turns[0].phase = 'searching';
+    await fs.writeFile(path, JSON.stringify(record));
+    const restarted = createAiService({
+        upstream: 'http://127.0.0.1:18082',
+        stateRoot: f.root,
+        secretRoot: f.secrets,
+        fetchImpl: f.fetchImpl,
+        requestDelay: 0,
+        cooldown: 0,
+    });
+    t.after(() => restarted.stop());
+    const chat = await restarted.conversation(done.conversationId, request);
+    assert.equal(chat.turns[0].phase, 'interrupted');
+    assert.equal(chat.turns[0].accounting.costUsd, done.accounting.costUsd);
+    assert(chat.turns[0].finished);
+    assert.equal(restarted.active(request), null);
+    assert.equal(f.modelCalls(), 1);
+});
+test('The same follow-up text in different conversations does not reuse a cached answer with the wrong context', async (t) => {
+    const f = await fixture(t);
+    const a = await finished(f.service, (await f.service.start({ ...input, prompt: 'Kämpfe' }, request)).id);
+    const b = await finished(f.service, (await f.service.start({ ...input, prompt: 'Romantik' }, request)).id);
+    for (const parent of [a, b])
+        await finished(
+            f.service,
+            (
+                await f.service.start(
+                    {
+                        ...input,
+                        prompt: 'Mehr davon',
+                        conversationId: parent.conversationId,
+                        parentJobId: parent.id,
+                        requestId: randomUUID(),
+                    },
+                    request,
+                )
+            ).id,
+        );
+    assert.equal(f.modelCalls(), 4);
+});
+test('Questions about previous suggestions can return an ordinary answer without another source scan', async (t) => {
+    let calls = 0;
+    const f = await fixture(t, {
+        model: async () =>
+            ++calls === 1
+                ? modelResult()
+                : modelResult({
+                      summary: 'Die Hauptgruppe und die Kämpfe passen zu deinem Wunsch.',
+                      criteria: [],
+                      notice: '',
+                      recommendations: [],
+                  }),
+    });
+    const a = await finished(f.service, (await f.service.start(input, request)).id);
+    const b = await finished(
+        f.service,
+        (
+            await f.service.start(
+                {
+                    ...input,
+                    prompt: 'Warum passt der erste Vorschlag?',
+                    conversationId: a.conversationId,
+                    parentJobId: a.id,
+                },
+                request,
+            )
+        ).id,
+    );
+    assert.equal(b.recommendations.length, 0);
+    assert.equal(b.checkedQueries, 0);
+    assert.match(b.summary, /Hauptgruppe/);
+    assert.equal((await f.service.history()).entries[0].conversationId, a.conversationId);
+    assert(!JSON.stringify(await f.service.history()).includes('ownerHash'));
+});
+test('Any whole result count from 1 to 100 works globally or per turn; invalid counts never start a provider request', async (t) => {
+    const f = await fixture(t);
+    await f.service.save({ resultCount: 17 });
+    assert.equal((await f.service.status()).resultCount, 17);
+    assert.equal((await f.service.status()).maxResultCount, 100);
+    for (const value of [0, -1, 101, 1.5, '8', NaN]) {
+        await assert.rejects(f.service.save({ resultCount: value }));
+        await assert.rejects(f.service.start({ ...input, resultCount: value }, request));
+    }
+    assert.equal(f.modelCalls(), 0);
+    const job = await finished(f.service, (await f.service.start({ ...input, resultCount: 1 }, request)).id);
+    assert.equal(job.resultCount, 1);
+    assert.equal((await f.service.status()).resultCount, 17);
+    const many = Array.from({ length: 100 }, (_, index) => ({
+        title: 'Title ' + index,
+        aliases: [],
+        reason: 'Reason',
+        caveat: '',
+    }));
+    assert.equal(validatePlan({ ...plan, recommendations: many }, 37).recommendations.length, 37);
+    let seen;
+    await recommend({
+        key,
+        settings: { ...AI_DEFAULTS, resultCount: 100 },
+        prompt: 'test',
+        language: 'de',
+        fetchImpl: async (_url, input) => {
+            seen = JSON.parse(input.body);
+            return modelResult({ ...plan, recommendations: many });
+        },
+    });
+    assert.equal(seen.text.format.schema.properties.recommendations.maxItems, 100);
+    assert(seen.max_output_tokens > 4500 && seen.max_output_tokens <= 48000);
+});
+test('A previously recorded search can be imported as a conversation without a provider call or duplicate billing', async (t) => {
+    const f = await fixture(t);
+    const id = randomUUID();
+    const legacy = {
+        id,
+        started: new Date().toISOString(),
+        finished: new Date().toISOString(),
+        phase: 'completed',
+        summary: plan.summary,
+        criteria: plan.criteria,
+        notice: '',
+        recommendations: [{ ...plan.recommendations[0], matches: [] }],
+        checkedQueries: 0,
+        completedSources: 0,
+        sources: [],
+    };
+    await f.service.ledger.begin(legacy, 'Frühere Suche', 'de', AI_DEFAULTS);
+    await f.service.ledger.finish(legacy);
+    const chat = await f.service.importConversation(id, request);
+    assert.equal(chat.turns[0].prompt, 'Frühere Suche');
+    assert.equal(chat.turns[0].recommendations[0].title, 'Naruto');
+    assert.equal(f.modelCalls(), 0);
+    assert.equal((await f.service.importConversation(id, request)).id, chat.id);
+    const next = await f.service.start(
+        { ...input, prompt: 'Mehr wie dein Vorschlag', conversationId: chat.id, parentJobId: id },
+        request,
+    );
+    await finished(f.service, next.id);
+    assert.equal(f.modelCalls(), 1);
+});
 
 test('AI requests use a fixed OpenAI endpoint, bounded structured output and no storage; errors never echo provider bodies', async () => {
     let seen;

@@ -476,7 +476,15 @@ export function createGateway({
                             ),
                         );
                     const id = url.pathname.match(/^\/private-api\/ai\/jobs\/([a-f0-9-]{36})$/)?.[1];
-                    if (req.method === 'GET' && id) return json(res, 200, ai.get(id, req));
+                    if (req.method === 'GET' && id)
+                        return json(res, 200, await (ai.readJob ? ai.readJob(id, req) : ai.get(id, req)));
+                    if (req.method === 'GET' && url.pathname === '/private-api/ai/conversations')
+                        return json(res, 200, { conversations: await ai.conversations(req) });
+                    const conversationId = url.pathname.match(
+                        /^\/private-api\/ai\/conversations\/([a-f0-9-]{36})$/,
+                    )?.[1];
+                    if (req.method === 'GET' && conversationId)
+                        return json(res, 200, await ai.conversation(conversationId, req));
                     if (req.method !== 'POST') return json(res, 404, { error: 'Unbekannte KI-Aktion.' });
                     if (!sameOrigin(req, config.origins))
                         return json(res, 403, {
@@ -491,6 +499,8 @@ export function createGateway({
                         return json(res, 200, await ai.save(input));
                     }
                     if (url.pathname === '/private-api/ai/test') return json(res, 200, await ai.testConnection());
+                    if (url.pathname === '/private-api/ai/conversations/import')
+                        return json(res, 200, await ai.importConversation(input.jobId, req));
                     if (url.pathname === '/private-api/ai/search') {
                         assert(
                             !translations.busy() && !cloud.busy(),

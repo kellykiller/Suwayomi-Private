@@ -29,6 +29,11 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm test
+      - name: Verify conversational AI search with real components and mocked providers
+        run: |
+          npm install --prefix /tmp/suwayomi-chat-playwright --no-package-lock --ignore-scripts playwright@1.62.1
+          pnpm exec vite build --config private/browser/ai-chat/vite.config.ts
+          LOGIN_PLAYWRIGHT=/tmp/suwayomi-chat-playwright node private/tests/ai-chat.smoke.mjs
       - name: Verify native login forms and responsive layouts in Chrome
         run: |
           npm install --prefix /tmp/suwayomi-login-browser --no-package-lock --ignore-scripts playwright@1.62.1

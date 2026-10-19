@@ -6,8 +6,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useLingui } from '@lingui/react/macro';
 import Alert from '@mui/material/Alert';
 import Accordion from '@mui/material/Accordion';
@@ -15,25 +15,29 @@ import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import Autocomplete from '@mui/material/Autocomplete';
 import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import LinearProgress from '@mui/material/LinearProgress';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import Box from '@mui/material/Box';
-import { SpinnerImage } from '@/base/components/SpinnerImage.tsx';
-import { Mangas } from '@/features/manga/services/Mangas.ts';
 import { AppRoutes } from '@/base/AppRoute.constants.ts';
 import { requestManager } from '@/lib/requests/RequestManager.ts';
 import { Sources } from '@/features/source/services/Sources.ts';
 import { useMetadataServerSettings } from '@/features/settings/services/ServerSettingsMetadata.ts';
 import { SourceLanguageSelect } from '@/features/source/components/SourceLanguageSelect.tsx';
 import { useAppTitleAndAction } from '@/features/navigation-bar/hooks/useAppTitleAndAction.ts';
-import { aiApi, AiApiError, type AiSearchJob, type AiSettingsData } from '@/features/ai-search/Ai.api.ts';
+import {
+    aiApi,
+    aiRequestId,
+    AiApiError,
+    type AiSearchJob,
+    type AiSettingsData,
+    type AiConversation,
+    type AiConversationSummary,
+} from '@/features/ai-search/Ai.api.ts';
+import { AiSearchResults } from '@/features/ai-search/AiSearchResults.tsx';
 
 const JOB_KEY = 'suwayomi-private-ai-job';
 function storedJob() {
@@ -45,37 +49,33 @@ function storedJob() {
 }
 function rememberJob(id: string | null) {
     try {
-        if (id) {
-            sessionStorage.setItem(JOB_KEY, id);
-        } else {
-            sessionStorage.removeItem(JOB_KEY);
-        }
+        if (id) sessionStorage.setItem(JOB_KEY, id);
+        else sessionStorage.removeItem(JOB_KEY);
     } catch {
-        /* Storage may be unavailable in private browser sessions. */
+        /* Private browser storage can be unavailable. */
     }
 }
 
 export function AiSearch() {
     const { t, i18n } = useLingui();
-    useAppTitleAndAction(t`AI search`, null);
+    useAppTitleAndAction('KI-Suche', null);
+    const [params] = useSearchParams();
+    const query = params.toString();
     const [settings, setSettings] = useState<AiSettingsData | null>(null);
     const [prompt, setPrompt] = useState('');
+    const [count, setCount] = useState('');
+    const [conversation, setConversation] = useState<AiConversation | null>(null);
+    const [conversations, setConversations] = useState<AiConversationSummary[]>([]);
     const [job, setJob] = useState<AiSearchJob | null>(null);
-    const [jobId, setJobId] = useState<string | null>(storedJob);
+    const [jobId, setJobId] = useState<string | null>(null);
     const [error, setError] = useState('');
     const [connectionError, setConnectionError] = useState('');
     const [pending, setPending] = useState(false);
     const [allLanguages, setAllLanguages] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[] | null>(null);
-    const [onlyFound, setOnlyFound] = useState(false);
-    const resumeActive = async (signal?: AbortSignal) => {
-        const result = await aiApi<{ job: AiSearchJob | null }>('active', undefined, signal);
-        if (result.job) {
-            setJob(result.job);
-            setJobId(result.job.id);
-            rememberJob(result.job.id);
-        }
-    };
+    const attempt = useRef<{ hash: string; id: string } | null>(null);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
+    const bottomRef = useRef<HTMLDivElement>(null);
     const { data, loading, error: sourceError } = requestManager.useGetSourceList();
     const {
         settings: { showNsfw },
@@ -96,52 +96,122 @@ export function AiSearch() {
         () => (selectedIds ? filteredSources.filter((source) => selectedIds.includes(source.id)) : filteredSources),
         [filteredSources, selectedIds],
     );
+    const busy = pending || (!!job && !job.finished);
+    const maximum = settings?.maxResultCount ?? 100;
+    const validCount = /^\d+$/.test(count) && Number(count) >= 1 && Number(count) <= maximum;
+    const refreshList = async (signal?: AbortSignal) => {
+        const result = await aiApi<{ conversations: AiConversationSummary[] }>('conversations', undefined, signal);
+        setConversations(result.conversations);
+    };
+    const showConversation = (value: AiConversation) => {
+        setConversation(value);
+        const last = value.turns.at(-1) ?? null;
+        setJob(last);
+        setJobId(last?.id ?? null);
+        rememberJob(last?.id ?? null);
+        if (last) {
+            setCount(String(last.resultCount ?? 6));
+            setAllLanguages(true);
+            setSelectedIds(last.sources.map((source) => source.id));
+        }
+        setConnectionError('');
+    };
+    const openConversation = async (id: string, signal?: AbortSignal) => {
+        showConversation(await aiApi<AiConversation>('conversations/' + encodeURIComponent(id), undefined, signal));
+    };
+    const acceptJob = async (value: AiSearchJob, signal?: AbortSignal) => {
+        setJob(value);
+        setJobId(value.id);
+        rememberJob(value.id);
+        if (value.conversationId) await openConversation(value.conversationId, signal);
+    };
     useEffect(() => {
         const controller = new AbortController();
         void aiApi<AiSettingsData>('settings', undefined, controller.signal)
-            .then(setSettings)
+            .then((value) => {
+                setSettings(value);
+                setCount((current) => current || String(value.resultCount));
+            })
             .catch((reason: Error) => {
-                if (!controller.signal.aborted) {
-                    setError(reason.message);
-                }
+                if (!controller.signal.aborted) setError(reason.message);
             });
-        void resumeActive(controller.signal).catch(() => {
-            /* Polling an existing job handles connection failures. */
-        });
         return () => controller.abort();
     }, []);
     useEffect(() => {
-        if (!jobId) {
-            return undefined;
-        }
+        const controller = new AbortController();
+        setPending(true);
+        const restore = async () => {
+            await refreshList(controller.signal);
+            const route = new URLSearchParams(query);
+            if (route.get('conversation')) await openConversation(route.get('conversation')!, controller.signal);
+            else if (route.get('historyJob'))
+                showConversation(
+                    await aiApi<AiConversation>(
+                        'conversations/import',
+                        { jobId: route.get('historyJob') },
+                        controller.signal,
+                    ),
+                );
+            else {
+                const active = await aiApi<{ job: AiSearchJob | null }>('active', undefined, controller.signal);
+                if (active.job) await acceptJob(active.job, controller.signal);
+                else if (storedJob()) {
+                    try {
+                        await acceptJob(
+                            await aiApi<AiSearchJob>(
+                                'jobs/' + encodeURIComponent(storedJob()!),
+                                undefined,
+                                controller.signal,
+                            ),
+                            controller.signal,
+                        );
+                    } catch (reason) {
+                        if (reason instanceof AiApiError && reason.status === 404) rememberJob(null);
+                        else throw reason;
+                    }
+                }
+            }
+        };
+        void restore()
+            .catch((reason: Error) => {
+                if (!controller.signal.aborted) setError(reason.message);
+            })
+            .finally(() => {
+                if (!controller.signal.aborted) setPending(false);
+            });
+        return () => controller.abort();
+    }, [query]);
+    useEffect(() => {
+        if (!jobId) return undefined;
         const controller = new AbortController();
         let timer: ReturnType<typeof setTimeout>;
         const poll = async () => {
             try {
                 const result = await aiApi<AiSearchJob>(
-                    `jobs/${encodeURIComponent(jobId)}`,
+                    'jobs/' + encodeURIComponent(jobId),
                     undefined,
                     controller.signal,
                 );
                 setJob(result);
                 setConnectionError('');
-                if (!result.finished) {
+                setConversation((current) =>
+                    current?.id === result.conversationId
+                        ? { ...current, turns: [...current.turns.filter((turn) => turn.id !== result.id), result] }
+                        : current,
+                );
+                if (!result.finished)
                     timer = setTimeout(() => {
                         void poll();
                     }, 1500);
-                }
+                else await refreshList(controller.signal);
             } catch (reason) {
-                if (controller.signal.aborted) {
-                    return;
-                }
+                if (controller.signal.aborted) return;
                 setConnectionError(reason instanceof Error ? reason.message : String(reason));
                 if (reason instanceof AiApiError && reason.status === 404) {
                     setJobId(null);
-                    setJob(null);
                     rememberJob(null);
                     return;
                 }
-                // Never restart a paid search automatically after a lost connection.
                 timer = setTimeout(() => {
                     void poll();
                 }, 5000);
@@ -153,43 +223,90 @@ export function AiSearch() {
             clearTimeout(timer);
         };
     }, [jobId]);
-    const chapterLabel = (match: AiSearchJob['recommendations'][number]['matches'][number]) => {
-        if (match.chapterCount !== null) {
-            return `${match.chapterCount} ${t`Chapters`}`;
+    useEffect(() => {
+        bottomRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, [job?.id, job?.finished]);
+    const send = async () => {
+        if (
+            busy ||
+            !validCount ||
+            !prompt.trim() ||
+            !settings?.enabled ||
+            !settings.configured ||
+            !selectedSources.length ||
+            selectedSources.length > 100
+        )
+            return;
+        setPending(true);
+        setError('');
+        const payload = {
+            prompt: prompt.trim(),
+            language: i18n.locale,
+            sourceIds: selectedSources.map((source) => source.id),
+            resultCount: Number(count),
+            ...(conversation ? { conversationId: conversation.id, parentJobId: job?.id } : {}),
+        };
+        const hash = JSON.stringify(payload);
+        if (attempt.current?.hash !== hash) attempt.current = { hash, id: aiRequestId() };
+        const requestId = attempt.current!.id;
+        rememberJob(requestId);
+        try {
+            const result = await aiApi<AiSearchJob>('search', { ...payload, requestId });
+            await acceptJob(result);
+            setPrompt('');
+            attempt.current = null;
+            await refreshList();
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+            // Read the exact accepted request after an ambiguous response. Never retry a paid POST automatically.
+            try {
+                await acceptJob(await aiApi<AiSearchJob>('jobs/' + requestId));
+                setPrompt('');
+                attempt.current = null;
+                setError('');
+            } catch {
+                /* Keep draft and request ID for an explicit retry with identical content. */
+            }
+        } finally {
+            setPending(false);
         }
-        if (match.detailsPhase === 'loading') {
-            return t`Loading chapters`;
-        }
-        return t`Chapter count unknown`;
     };
-    const busy = pending || (!!job && !job.finished);
-    const phases = {
-        planning: t`Understanding your request`,
-        searching: t`Searching installed sources`,
-        completed: t`Search completed`,
-        partial: t`Search time limit reached`,
-        cancelled: t`Search cancelled`,
-        failed: t`Search failed`,
+    const moreLike = (title: string) => {
+        setPrompt('Mehr wie „' + title + '“, das du mir vorgeschlagen hast. Was kannst du mir noch empfehlen?');
+        inputRef.current?.focus();
+        bottomRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     };
-    const sourcePhases = {
-        pending: t`Waiting`,
-        searching: t`Searching`,
-        completed: t`Checked`,
-        failed: t`Failed`,
-        interrupted: t`Not fully checked`,
-    };
-    const recommendations = job?.recommendations.filter((item) => !onlyFound || item.matches.length) ?? [];
+    const selectedChat =
+        conversations.find((value) => value.id === conversation?.id) ??
+        (conversation
+            ? {
+                  id: conversation.id,
+                  title: conversation.title,
+                  updated: conversation.updated,
+                  turnCount: conversation.turns.length,
+              }
+            : null);
+    const turns = conversation?.turns ?? (job ? [job] : []);
     return (
         <Stack spacing={2} sx={{ p: 2, maxWidth: 1100, mx: 'auto' }}>
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-                <Typography variant="h5">{t`AI search`}</Typography>
-                <Button component={Link} to={AppRoutes.settings.children.ai.path}>{t`AI settings`}</Button>
-                <Button
-                    component={Link}
-                    to={AppRoutes.settings.children.aiUsage.path}
-                >{t`AI usage and balance`}</Button>
+            <Stack
+                direction="row"
+                spacing={1}
+                useFlexGap
+                sx={{ flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}
+            >
+                <Typography variant="h5">KI-Suche</Typography>
+                <Button component={Link} to={AppRoutes.settings.children.ai.path}>
+                    KI-Einstellungen
+                </Button>
+                <Button component={Link} to={AppRoutes.settings.children.aiUsage.path}>
+                    Nutzung und Suchhistorie
+                </Button>
             </Stack>
-            <Typography color="text.secondary">{t`Describe what you want to read. AI suggests titles and Suwayomi looks for them across your selected installed sources.`}</Typography>
+            <Typography color="text.secondary">
+                Beschreibe, was du lesen möchtest. Du kannst danach nachfragen, Wünsche ergänzen oder mehr wie einen
+                vorgeschlagenen Titel suchen.
+            </Typography>
             {error && (
                 <Alert severity="error" onClose={() => setError('')}>
                     {error}
@@ -198,18 +315,121 @@ export function AiSearch() {
             {sourceError && <Alert severity="error">{sourceError.message}</Alert>}
             {connectionError && <Alert severity="error">{connectionError}</Alert>}
             {settings && (!settings.configured || !settings.enabled) && (
-                <Alert severity="info">{t`Configure and enable AI search in the settings first.`}</Alert>
+                <Alert severity="info">
+                    Bitte die KI-Suche zuerst in den Einstellungen aktivieren und einen API-Schlüssel hinterlegen.
+                </Alert>
             )}
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                <Autocomplete
+                    sx={{ flex: 1 }}
+                    options={conversations}
+                    value={selectedChat}
+                    disabled={busy}
+                    isOptionEqualToValue={(a, b) => a.id === b.id}
+                    getOptionLabel={(value) => value.title}
+                    onChange={(_, value) => {
+                        if (!value) return;
+                        setPending(true);
+                        setPrompt('');
+                        attempt.current = null;
+                        void openConversation(value.id)
+                            .catch((reason: Error) => setError(reason.message))
+                            .finally(() => setPending(false));
+                    }}
+                    renderInput={(props) => <TextField {...props} label="Gespeichertes Gespräch öffnen" />}
+                />
+                <Button
+                    disabled={busy}
+                    variant="outlined"
+                    onClick={() => {
+                        setConversation(null);
+                        setJob(null);
+                        setJobId(null);
+                        setPrompt('');
+                        setError('');
+                        setConnectionError('');
+                        attempt.current = null;
+                        rememberJob(null);
+                    }}
+                >
+                    Neues Gespräch
+                </Button>
+            </Stack>
+            <Stack spacing={2} aria-label="Gesprächsverlauf">
+                {turns.map((turn, index) => (
+                    <Stack key={turn.id} spacing={1}>
+                        <Paper
+                            variant="outlined"
+                            sx={{ p: 2, alignSelf: 'flex-end', maxWidth: '95%', bgcolor: 'action.selected' }}
+                        >
+                            <Typography variant="caption" color="text.secondary">
+                                Du
+                            </Typography>
+                            <Typography sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                                {turn.prompt || 'Frühere Suche'}
+                            </Typography>
+                        </Paper>
+                        <Typography variant="caption" color="text.secondary">
+                            KI · maximal {turn.resultCount ?? settings?.resultCount} Vorschläge
+                        </Typography>
+                        {index === turns.length - 1 ? (
+                            <AiSearchResults job={turn} onMoreLike={moreLike} />
+                        ) : (
+                            <Stack spacing={1}>
+                                <Typography sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                                    {turn.summary || turn.error || 'Keine vollständige Antwort.'}
+                                </Typography>
+                                <Accordion>
+                                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                                        <Typography>
+                                            {turn.recommendations.length} frühere Vorschläge und Suchdetails anzeigen
+                                        </Typography>
+                                    </AccordionSummary>
+                                    <AccordionDetails>
+                                        <AiSearchResults job={turn} onMoreLike={moreLike} />
+                                    </AccordionDetails>
+                                </Accordion>
+                            </Stack>
+                        )}
+                    </Stack>
+                ))}
+            </Stack>
             <Paper variant="outlined" sx={{ p: 2 }}>
                 <Stack spacing={2}>
                     <TextField
-                        label={t`What would you like to read?`}
+                        label={conversation ? 'Nachricht an die KI' : 'Was möchtest du lesen?'}
+                        placeholder={
+                            conversation
+                                ? 'Zum Beispiel: Mehr wie dein zweiter Vorschlag, aber ohne Harem.'
+                                : 'Welche Geschichten, Genres und Entwicklungen suchst du?'
+                        }
                         multiline
                         minRows={3}
                         value={prompt}
+                        inputRef={inputRef}
                         disabled={busy}
                         onChange={(event) => setPrompt(event.target.value)}
-                        slotProps={{ htmlInput: { maxLength: 2000 } }}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                                event.preventDefault();
+                                void send();
+                            }
+                        }}
+                        slotProps={{ htmlInput: { maxLength: 2000, enterKeyHint: 'send' } }}
+                    />
+                    <TextField
+                        label="Maximale Vorschläge pro Antwort"
+                        type="number"
+                        value={count}
+                        onChange={(event) => setCount(event.target.value)}
+                        disabled={busy}
+                        error={!!count && !validCount}
+                        helperText={
+                            'Ganze Zahl von 1 bis ' +
+                            maximum +
+                            '. Die KI darf weniger nennen, wenn passende Titel fehlen.'
+                        }
+                        slotProps={{ htmlInput: { min: 1, max: maximum, step: 1, inputMode: 'numeric' } }}
                     />
                     <Accordion disableGutters>
                         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -262,6 +482,7 @@ export function AiSearch() {
                             </Stack>
                         </AccordionDetails>
                     </Accordion>
+
                     <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
                         <Button
                             variant="contained"
@@ -269,33 +490,18 @@ export function AiSearch() {
                                 busy ||
                                 loading ||
                                 !prompt.trim() ||
+                                !validCount ||
                                 !settings?.enabled ||
                                 !settings.configured ||
                                 !selectedSources.length ||
                                 selectedSources.length > 100
                             }
                             onClick={() => {
-                                setPending(true);
-                                setError('');
-                                void aiApi<AiSearchJob>('search', {
-                                    prompt: prompt.trim(),
-                                    language: i18n.locale,
-                                    sourceIds: selectedSources.map((source) => source.id),
-                                })
-                                    .then((result) => {
-                                        setJob(result);
-                                        setJobId(result.id);
-                                        rememberJob(result.id);
-                                    })
-                                    .catch(async (reason: Error) => {
-                                        setError(reason.message);
-                                        await resumeActive().catch(() => {
-                                            /* The next visit can resume the active job. */
-                                        });
-                                    })
-                                    .finally(() => setPending(false));
+                                void send();
                             }}
-                        >{t`Find recommendations`}</Button>
+                        >
+                            Nachricht senden
+                        </Button>
                         {job && !job.finished && (
                             <Button
                                 disabled={pending}
@@ -306,196 +512,19 @@ export function AiSearch() {
                                         .catch((reason: Error) => setError(reason.message))
                                         .finally(() => setPending(false));
                                 }}
-                            >{t`Cancel search`}</Button>
-                        )}
-                        {jobId && (
-                            <Button
-                                disabled={busy}
-                                onClick={() => {
-                                    setJobId(null);
-                                    setJob(null);
-                                    rememberJob(null);
-                                    setError('');
-                                }}
-                            >{t`Clear results`}</Button>
+                            >
+                                Aktuelle Antwort abbrechen
+                            </Button>
                         )}
                     </Stack>
-                    <Typography
-                        variant="body2"
-                        color="text.secondary"
-                    >{t`One AI request per new search. Identical requests reuse the AI answer for 24 hours; source availability is checked again.`}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        Enter sendet, Umschalt+Enter fügt einen Zeilenumbruch ein. Neue Antworten können API-Kosten
+                        verursachen; bisherige Nachrichten werden als Kontext mitgesendet. Das Öffnen des gespeicherten
+                        Verlaufs startet keine KI-Anfrage.
+                    </Typography>
                 </Stack>
             </Paper>
-            {job && (
-                <>
-                    <Paper variant="outlined" sx={{ p: 2 }}>
-                        <Stack spacing={1}>
-                            <Typography variant="h6">{phases[job.phase]}</Typography>
-                            {!job.finished && <LinearProgress />}
-                            <Typography color="text.secondary">
-                                {t`Sources checked`}: {job.completedSources}/{job.sources.length} · {t`Source queries`}:{' '}
-                                {job.checkedQueries}
-                            </Typography>
-                            {job.summary && <Typography>{job.summary}</Typography>}
-                            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                                {job.criteria.map((criterion) => (
-                                    <Chip key={criterion} label={criterion} />
-                                ))}
-                            </Stack>
-                            {job.notice && <Alert severity="info">{job.notice}</Alert>}
-                            {job.error && <Alert severity="error">{job.error}</Alert>}
-                            {job.cached && (
-                                <Typography
-                                    variant="body2"
-                                    color="text.secondary"
-                                >{t`AI answer reused from cache`}</Typography>
-                            )}
-                            {job.usage && !job.cached && (
-                                <Typography variant="body2" color="text.secondary">
-                                    {job.model} · {t`Input tokens`}: {job.usage.inputTokens} · {t`Output tokens`}:{' '}
-                                    {job.usage.outputTokens}
-                                </Typography>
-                            )}
-                            {job.accounting && (
-                                <Typography variant="body2" color="text.secondary">
-                                    {t`Estimated search cost`}:{' '}
-                                    {job.accounting.costUsd === null
-                                        ? t`Unknown`
-                                        : new Intl.NumberFormat(i18n.locale, {
-                                              style: 'currency',
-                                              currency: 'USD',
-                                              minimumFractionDigits: 4,
-                                              maximumFractionDigits: 6,
-                                          }).format(job.accounting.costUsd)}
-                                    {' · '}
-                                    {t`Estimated balance after search`}:{' '}
-                                    {job.accounting.balanceAfterUsd === null
-                                        ? t`Unknown`
-                                        : new Intl.NumberFormat(i18n.locale, {
-                                              style: 'currency',
-                                              currency: 'USD',
-                                              minimumFractionDigits: 4,
-                                              maximumFractionDigits: 6,
-                                          }).format(job.accounting.balanceAfterUsd)}
-                                </Typography>
-                            )}
-                        </Stack>
-                    </Paper>
-                    {!!job.recommendations.length && (
-                        <>
-                            <Alert severity="info">{t`Recommendation reasons are AI assessments. A source match confirms a title listing, not chapter completeness or the claimed story development. Missing matches may be caused by title variants, source errors or search limits.`}</Alert>
-                            <FormControlLabel
-                                control={<Switch checked={onlyFound} onChange={(_, value) => setOnlyFound(value)} />}
-                                label={t`Only show titles found in sources`}
-                            />
-                        </>
-                    )}
-                    {recommendations.map((item, index) => (
-                        <Paper key={item.title} variant="outlined" sx={{ p: 2 }}>
-                            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                                <Box
-                                    sx={{
-                                        width: { xs: 100, sm: 130 },
-                                        aspectRatio: '2 / 3',
-                                        flexShrink: 0,
-                                        borderRadius: 1,
-                                        overflow: 'hidden',
-                                        position: 'relative',
-                                        bgcolor: 'action.hover',
-                                    }}
-                                >
-                                    <SpinnerImage
-                                        alt={item.title}
-                                        src={
-                                            item.matches.find((match) => !!match.thumbnailUrl)
-                                                ? Mangas.getThumbnailUrl(
-                                                      item.matches.find((match) => !!match.thumbnailUrl)!,
-                                                  )
-                                                : ''
-                                        }
-                                        imgStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                        spinnerStyle={{
-                                            width: '100%',
-                                            height: '100%',
-                                            display: 'grid',
-                                            placeItems: 'center',
-                                        }}
-                                    />
-                                </Box>
-                                <Stack spacing={1} sx={{ flex: 1, minWidth: 0 }}>
-                                    <Typography variant="h6">
-                                        {index + 1}. {item.title}
-                                    </Typography>
-                                    {!!item.aliases.length && (
-                                        <Typography variant="body2" color="text.secondary">
-                                            {item.aliases.join(' · ')}
-                                        </Typography>
-                                    )}
-                                    <Typography>{item.reason}</Typography>
-                                    {item.caveat && (
-                                        <Typography color="text.secondary">
-                                            {t`Considerations`}: {item.caveat}
-                                        </Typography>
-                                    )}
-                                    <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                                        {item.matches.map((match) => (
-                                            <Button
-                                                key={match.id}
-                                                component={Link}
-                                                to={AppRoutes.manga.path(match.id)}
-                                                variant="outlined"
-                                            >
-                                                {match.sourceName} · {match.language}
-                                                {' · '}
-                                                {chapterLabel(match)}
-                                                {match.chapterEntryCount !== null &&
-                                                match.chapterEntryCount !== match.chapterCount
-                                                    ? ` (${match.chapterEntryCount} ${t`Entries`})`
-                                                    : ''}
-                                                {match.inLibrary ? ` · ${t`In library`}` : ''}
-                                            </Button>
-                                        ))}
-                                    </Stack>
-                                    {!item.matches.length && (
-                                        <Typography color="text.secondary">
-                                            {job.finished
-                                                ? t`No matching listing found in the checked sources`
-                                                : t`No matching listing found yet`}
-                                        </Typography>
-                                    )}
-                                    <Button
-                                        component={Link}
-                                        to={AppRoutes.sources.children.searchAll.path(item.title)}
-                                        sx={{ alignSelf: 'flex-start' }}
-                                    >{t`Search this title manually`}</Button>
-                                </Stack>
-                            </Stack>
-                        </Paper>
-                    ))}
-                    {job.finished && !recommendations.length && (
-                        <Typography>{t`No recommendations to display. Try adjusting your request or sources.`}</Typography>
-                    )}
-                    <Accordion>
-                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                            <Typography>{t`Source check details`}</Typography>
-                        </AccordionSummary>
-                        <AccordionDetails>
-                            <Stack spacing={1}>
-                                <Typography
-                                    color="text.secondary"
-                                    variant="body2"
-                                >{t`Sources are checked three at a time, using titles and alternative names on the first two result pages. The search stops after four minutes and keeps partial results.`}</Typography>
-                                {job.sources.map((source) => (
-                                    <Typography key={source.id} variant="body2">
-                                        {source.name} ({source.language}) · {sourcePhases[source.phase]}
-                                        {source.truncated ? ` · ${t`More result pages remain unchecked`}` : ''}
-                                    </Typography>
-                                ))}
-                            </Stack>
-                        </AccordionDetails>
-                    </Accordion>
-                </>
-            )}
+            <div ref={bottomRef} />
         </Stack>
     );
 }

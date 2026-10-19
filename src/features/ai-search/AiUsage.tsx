@@ -452,6 +452,20 @@ export function AiUsage() {
                     <AccordionDetails>
                         <Stack spacing={1}>
                             <Typography variant="subtitle1">{t`Prompt`}</Typography>
+                            {(!entry.kind || entry.kind === 'search') && entry.finished && entry.result && (
+                                <Button
+                                    component={Link}
+                                    to={
+                                        AppRoutes.sources.children.aiSearch.path +
+                                        (entry.conversationId
+                                            ? '?conversation=' + encodeURIComponent(entry.conversationId)
+                                            : '?historyJob=' + encodeURIComponent(entry.id))
+                                    }
+                                    sx={{ alignSelf: 'flex-start' }}
+                                >
+                                    Gespräch fortsetzen
+                                </Button>
+                            )}
                             <Typography sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
                                 {entry.prompt}
                             </Typography>

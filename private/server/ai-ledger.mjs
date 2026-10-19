@@ -144,6 +144,9 @@ export function createAiLedger({ stateRoot = '/update', initialBalance = 2.31 } 
         const entry = {
             id: job.id,
             kind: job.kind || 'search',
+            conversationId: job.conversationId || null,
+            parentJobId: job.parentJobId || null,
+            ownerHash: job.owner || null,
             translationJobId: job.translationJobId || null,
             chapter: job.chapter || null,
             stage: job.stage || null,
@@ -302,7 +305,10 @@ export function createAiLedger({ stateRoot = '/update', initialBalance = 2.31 } 
         const entries = db
             .prepare('SELECT payload FROM searches ORDER BY seq DESC LIMIT ? OFFSET ?')
             .all(limit, offset)
-            .map((row) => JSON.parse(row.payload));
+            .map((row) => {
+                const { ownerHash: _owner, ...entry } = JSON.parse(row.payload);
+                return entry;
+            });
         return {
             entries,
             total: count,

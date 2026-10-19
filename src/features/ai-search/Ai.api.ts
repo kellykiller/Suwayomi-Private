@@ -15,6 +15,7 @@ export type AiSettingsData = {
     reasoning: 'low' | 'medium';
     resultCount: number;
     models: string[];
+    maxResultCount?: number;
 };
 export type AiSourceProgress = {
     id: string;
@@ -26,7 +27,13 @@ export type AiSourceProgress = {
 };
 export type AiSearchJob = {
     id: string;
-    phase: 'planning' | 'searching' | 'completed' | 'partial' | 'cancelled' | 'failed';
+    conversationId?: string;
+    parentJobId?: string | null;
+    prompt?: string;
+    language?: string;
+    resultCount?: number;
+    started?: string;
+    phase: 'planning' | 'searching' | 'completed' | 'partial' | 'cancelled' | 'failed' | 'interrupted';
     finished: string | null;
     model: string;
     summary: string;
@@ -67,6 +74,7 @@ export type AiSearchJob = {
 };
 export type AiHistoryEntry = {
     id: string;
+    conversationId?: string | null;
     kind?: 'search' | 'translation';
     chapter?: { id: number; title: string; name: string } | null;
     stage?: string | null;
@@ -98,6 +106,16 @@ export type AiHistoryEntry = {
         recommendations: AiSearchJob['recommendations'];
     } | null;
 };
+export type AiConversationSummary = { id: string; title: string; updated: string; turnCount: number };
+export type AiConversation = { id: string; title: string; created: string; updated: string; turns: AiSearchJob[] };
+
+export function aiRequestId(): string {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    const value = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+}
 export type AiHistoryPage = { entries: AiHistoryEntry[]; total: number; offset: number; nextOffset: number | null };
 export type AiBillingSnapshot = {
     fetchedAt: string;
