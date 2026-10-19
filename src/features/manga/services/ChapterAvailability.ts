@@ -39,12 +39,17 @@ export function createChapterAvailability({ fetchImpl = fetch, spacing = 350, ti
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const read = async (task: Task): Promise<ChapterAvailability> => {
+        // AbortSignal.any/timeout are unavailable on some supported iPads.
+        const request = new AbortController();
+        const abort = () => request.abort();
+        task.controller.signal.addEventListener('abort', abort, { once: true });
+        const deadline = setTimeout(abort, timeout);
         try {
             const response = await fetchImpl('/api/graphql', {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
-                signal: AbortSignal.any([task.controller.signal, AbortSignal.timeout(timeout)]),
+                signal: request.signal,
                 body: JSON.stringify({
                     query: 'mutation ReadableManga($id: Int!) { fetchMangaAndChapters(input: { id: $id, fetchManga: false, fetchChapters: true }) { chapters { id } } }',
                     variables: { id: task.manga.id },
@@ -65,6 +70,9 @@ export function createChapterAvailability({ fetchImpl = fetch, spacing = 350, ti
             return chapters.length ? 'readable' : 'empty';
         } catch {
             return task.controller.signal.aborted ? 'cancelled' : 'failed';
+        } finally {
+            clearTimeout(deadline);
+            task.controller.signal.removeEventListener('abort', abort);
         }
     };
     function start(task: Task) {

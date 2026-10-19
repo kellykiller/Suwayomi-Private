@@ -273,7 +273,7 @@ const SourceSearchPreview = React.memo(
                     <EmptyView
                         sx={{ alignItems: 'start', height: undefined }}
                         noFaces
-                        message={errorMessage}
+                        message={errorMessage ?? t`Could not search source`}
                         messageExtra={getErrorMessage(sourceError)}
                         retry={
                             sourceError

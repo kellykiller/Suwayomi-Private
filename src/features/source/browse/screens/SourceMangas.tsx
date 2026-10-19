@@ -173,25 +173,24 @@ const useSourceManga = (
         .map((item) => item.id);
 
     const isPageLoading = pages.slice(-1)[0].isLoading;
-    let filteredOutAllItemsOfFetchedPage = !isPageLoading;
+    const filteredOutAllItemsOfFetchedPage =
+        !isPageLoading && !!lastLoadedPage?.data?.fetchSourceManga?.mangas.length && lastPageMangaIds.length === 0;
     const items = useMemo(() => {
         type FetchItemsResult = NonNullable<GetSourceMangasFetchMutation['fetchSourceManga']>['mangas'];
         let allItems: FetchItemsResult = [];
 
-        pages.forEach((page, index) => {
+        pages.forEach((page) => {
             const pageItems = page.data?.fetchSourceManga?.mangas ?? [];
             const nonLibraryPageItems = pageItems.filter(
                 (item) => item.id !== mangaId && (!hideLibraryEntries || !item.inLibrary),
             );
             const uniqueItems = getUniqueMangas([...allItems, ...nonLibraryPageItems]);
 
-            const isLastPage = !isPageLoading && pages.length === index + 1;
-            filteredOutAllItemsOfFetchedPage = isLastPage && !nonLibraryPageItems.length && !!pageItems.length;
             allItems = uniqueItems;
         });
 
         return allItems;
-    }, [pages, hideLibraryEntries]);
+    }, [pages, hideLibraryEntries, mangaId]);
 
     if (lastLoadedPageIndex === -1) {
         return [result[0], { ...result[1][result[1].length - 1], filteredOutAllItemsOfFetchedPage, lastPageMangaIds }];
