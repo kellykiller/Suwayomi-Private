@@ -82,7 +82,8 @@ try {
             main: document.querySelector('main').getBoundingClientRect().toJSON(),
         }));
         assert(layout.scrollWidth <= layout.width && layout.main.x >= 0 && layout.main.y >= 0, JSON.stringify(layout));
-        await page.screenshot({ path: screenshots + '/' + name + '.png', fullPage: true });
+        const preview = await page.screenshot({ path: screenshots + '/' + name + '.png', fullPage: true });
+        if (name === 'ipad-light') console.log('LOGIN_EMPTY_PREVIEW_BASE64:' + preview.toString('base64'));
         await page.getByRole('button', { name: 'Anzeigen', exact: true }).click();
         assert.equal(await page.getByLabel('Passwort', { exact: true }).getAttribute('type'), 'text');
         await page.getByRole('button', { name: 'Verbergen', exact: true }).click();
