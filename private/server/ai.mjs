@@ -241,7 +241,11 @@ export function createAiService({
     });
     const owner = (req) =>
         createHash('sha256')
-            .update(JSON.stringify(credentials(req)))
+            .update(
+                JSON.stringify(
+                    req.headers.authorization ? { Authorization: req.headers.authorization } : credentials(req),
+                ),
+            )
             .digest('hex');
     async function settings() {
         const saved = await readJson(settingsPath).catch((error) => {

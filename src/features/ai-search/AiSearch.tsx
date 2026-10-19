@@ -195,7 +195,7 @@ export function AiSearch() {
                 setJob(result);
                 setConnectionError('');
                 setConversation((current) =>
-                    current?.id === result.conversationId
+                    current && current.id === result.conversationId
                         ? { ...current, turns: [...current.turns.filter((turn) => turn.id !== result.id), result] }
                         : current,
                 );
@@ -266,6 +266,7 @@ export function AiSearch() {
                 setError('');
             } catch {
                 /* Keep draft and request ID for an explicit retry with identical content. */
+                await refreshList().catch(() => {});
             }
         } finally {
             setPending(false);
@@ -346,6 +347,7 @@ export function AiSearch() {
                         setJob(null);
                         setJobId(null);
                         setPrompt('');
+                        setCount(String(settings?.resultCount ?? 6));
                         setError('');
                         setConnectionError('');
                         attempt.current = null;

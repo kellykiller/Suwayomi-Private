@@ -167,6 +167,19 @@ test('Conversation ownership and stale-tab checks run before any further model c
     assert.equal(f.modelCalls(), 2);
     assert.equal((await f.service.conversation(a.conversationId, request)).turns.at(-1).id, b.id);
 });
+test('Browser cookies can change without losing a conversation owned by the same verified authorization', async (t) => {
+    const f = await fixture(t);
+    const firstRequest = { headers: { ...request.headers, cookie: 'preference=old' } };
+    const nextRequest = { headers: { ...request.headers, cookie: 'preference=new; native-session=rotated' } };
+    const first = await finished(f.service, (await f.service.start(input, firstRequest)).id, firstRequest);
+    assert.equal((await f.service.conversation(first.conversationId, nextRequest)).id, first.conversationId);
+    const next = await f.service.start(
+        { ...input, prompt: 'Mehr davon', conversationId: first.conversationId, parentJobId: first.id },
+        nextRequest,
+    );
+    await finished(f.service, next.id, nextRequest);
+    assert.equal((await f.service.conversation(first.conversationId, nextRequest)).turns.length, 2);
+});
 test('An exact retry after a lost response returns the same turn without billing again, even after a service restart', async (t) => {
     const f = await fixture(t),
         message = { ...input, requestId: randomUUID(), resultCount: 9 };
