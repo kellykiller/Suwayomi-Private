@@ -49,8 +49,11 @@ function storedJob() {
 }
 function rememberJob(id: string | null) {
     try {
-        if (id) sessionStorage.setItem(JOB_KEY, id);
-        else sessionStorage.removeItem(JOB_KEY);
+        if (id) {
+            sessionStorage.setItem(JOB_KEY, id);
+        } else {
+            sessionStorage.removeItem(JOB_KEY);
+        }
     } catch {
         /* Private browser storage can be unavailable. */
     }
@@ -59,8 +62,8 @@ function rememberJob(id: string | null) {
 export function AiSearch() {
     const { t, i18n } = useLingui();
     useAppTitleAndAction('KI-Suche', null);
-    const [params] = useSearchParams();
-    const query = params.toString();
+    const [routeParams] = useSearchParams();
+    const query = routeParams.toString();
     const [settings, setSettings] = useState<AiSettingsData | null>(null);
     const [prompt, setPrompt] = useState('');
     const [count, setCount] = useState('');
@@ -117,13 +120,15 @@ export function AiSearch() {
         setConnectionError('');
     };
     const openConversation = async (id: string, signal?: AbortSignal) => {
-        showConversation(await aiApi<AiConversation>('conversations/' + encodeURIComponent(id), undefined, signal));
+        showConversation(await aiApi<AiConversation>(`conversations/${encodeURIComponent(id)}`, undefined, signal));
     };
     const acceptJob = async (value: AiSearchJob, signal?: AbortSignal) => {
         setJob(value);
         setJobId(value.id);
         rememberJob(value.id);
-        if (value.conversationId) await openConversation(value.conversationId, signal);
+        if (value.conversationId) {
+            await openConversation(value.conversationId, signal);
+        }
     };
     useEffect(() => {
         const controller = new AbortController();
@@ -133,7 +138,9 @@ export function AiSearch() {
                 setCount((current) => current || String(value.resultCount));
             })
             .catch((reason: Error) => {
-                if (!controller.signal.aborted) setError(reason.message);
+                if (!controller.signal.aborted) {
+                    setError(reason.message);
+                }
             });
         return () => controller.abort();
     }, []);
@@ -143,8 +150,9 @@ export function AiSearch() {
         const restore = async () => {
             await refreshList(controller.signal);
             const route = new URLSearchParams(query);
-            if (route.get('conversation')) await openConversation(route.get('conversation')!, controller.signal);
-            else if (route.get('historyJob'))
+            if (route.get('conversation')) {
+                await openConversation(route.get('conversation')!, controller.signal);
+            } else if (route.get('historyJob')) {
                 showConversation(
                     await aiApi<AiConversation>(
                         'conversations/import',
@@ -152,43 +160,53 @@ export function AiSearch() {
                         controller.signal,
                     ),
                 );
-            else {
+            } else {
                 const active = await aiApi<{ job: AiSearchJob | null }>('active', undefined, controller.signal);
-                if (active.job) await acceptJob(active.job, controller.signal);
-                else if (storedJob()) {
+                if (active.job) {
+                    await acceptJob(active.job, controller.signal);
+                } else if (storedJob()) {
                     try {
                         await acceptJob(
                             await aiApi<AiSearchJob>(
-                                'jobs/' + encodeURIComponent(storedJob()!),
+                                `jobs/${encodeURIComponent(storedJob()!)}`,
                                 undefined,
                                 controller.signal,
                             ),
                             controller.signal,
                         );
                     } catch (reason) {
-                        if (reason instanceof AiApiError && reason.status === 404) rememberJob(null);
-                        else throw reason;
+                        if (reason instanceof AiApiError && reason.status === 404) {
+                            rememberJob(null);
+                        } else {
+                            throw reason;
+                        }
                     }
                 }
             }
         };
         void restore()
             .catch((reason: Error) => {
-                if (!controller.signal.aborted) setError(reason.message);
+                if (!controller.signal.aborted) {
+                    setError(reason.message);
+                }
             })
             .finally(() => {
-                if (!controller.signal.aborted) setPending(false);
+                if (!controller.signal.aborted) {
+                    setPending(false);
+                }
             });
         return () => controller.abort();
     }, [query]);
     useEffect(() => {
-        if (!jobId) return undefined;
+        if (!jobId) {
+            return undefined;
+        }
         const controller = new AbortController();
         let timer: ReturnType<typeof setTimeout>;
         const poll = async () => {
             try {
                 const result = await aiApi<AiSearchJob>(
-                    'jobs/' + encodeURIComponent(jobId),
+                    `jobs/${encodeURIComponent(jobId)}`,
                     undefined,
                     controller.signal,
                 );
@@ -199,13 +217,17 @@ export function AiSearch() {
                         ? { ...current, turns: [...current.turns.filter((turn) => turn.id !== result.id), result] }
                         : current,
                 );
-                if (!result.finished)
+                if (!result.finished) {
                     timer = setTimeout(() => {
                         void poll();
                     }, 1500);
-                else await refreshList(controller.signal);
+                } else {
+                    await refreshList(controller.signal);
+                }
             } catch (reason) {
-                if (controller.signal.aborted) return;
+                if (controller.signal.aborted) {
+                    return;
+                }
                 setConnectionError(reason instanceof Error ? reason.message : String(reason));
                 if (reason instanceof AiApiError && reason.status === 404) {
                     setJobId(null);
@@ -235,8 +257,9 @@ export function AiSearch() {
             !settings.configured ||
             !selectedSources.length ||
             selectedSources.length > 100
-        )
+        ) {
             return;
+        }
         setPending(true);
         setError('');
         const payload = {
@@ -247,7 +270,9 @@ export function AiSearch() {
             ...(conversation ? { conversationId: conversation.id, parentJobId: job?.id } : {}),
         };
         const hash = JSON.stringify(payload);
-        if (attempt.current?.hash !== hash) attempt.current = { hash, id: aiRequestId() };
+        if (attempt.current?.hash !== hash) {
+            attempt.current = { hash, id: aiRequestId() };
+        }
         const requestId = attempt.current!.id;
         rememberJob(requestId);
         try {
@@ -260,7 +285,7 @@ export function AiSearch() {
             setError(reason instanceof Error ? reason.message : String(reason));
             // Read the exact accepted request after an ambiguous response. Never retry a paid POST automatically.
             try {
-                await acceptJob(await aiApi<AiSearchJob>('jobs/' + requestId));
+                await acceptJob(await aiApi<AiSearchJob>(`jobs/${requestId}`));
                 setPrompt('');
                 attempt.current = null;
                 setError('');
@@ -273,7 +298,7 @@ export function AiSearch() {
         }
     };
     const moreLike = (title: string) => {
-        setPrompt('Mehr wie „' + title + '“, das du mir vorgeschlagen hast. Was kannst du mir noch empfehlen?');
+        setPrompt(`Mehr wie „${title}“, das du mir vorgeschlagen hast. Was kannst du mir noch empfehlen?`);
         inputRef.current?.focus();
         bottomRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     };
@@ -329,7 +354,9 @@ export function AiSearch() {
                     isOptionEqualToValue={(a, b) => a.id === b.id}
                     getOptionLabel={(value) => value.title}
                     onChange={(_, value) => {
-                        if (!value) return;
+                        if (!value) {
+                            return;
+                        }
                         setPending(true);
                         setPrompt('');
                         attempt.current = null;
@@ -426,11 +453,9 @@ export function AiSearch() {
                         onChange={(event) => setCount(event.target.value)}
                         disabled={busy}
                         error={!!count && !validCount}
-                        helperText={
-                            'Ganze Zahl von 1 bis ' +
-                            maximum +
-                            '. Die KI darf weniger nennen, wenn passende Titel fehlen.'
-                        }
+                        helperText={`Ganze Zahl von 1 bis ${
+                            maximum
+                        }. Die KI darf weniger nennen, wenn passende Titel fehlen.`}
                         slotProps={{ htmlInput: { min: 1, max: maximum, step: 1, inputMode: 'numeric' } }}
                     />
                     <Accordion disableGutters>

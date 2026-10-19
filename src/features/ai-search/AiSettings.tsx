@@ -130,11 +130,9 @@ export function AiSettings() {
                                     Number(resultCount) < 1 ||
                                     Number(resultCount) > (settings.maxResultCount ?? 100))
                             }
-                            helperText={
-                                'Standard je Antwort: ganze Zahl von 1 bis ' +
-                                (settings.maxResultCount ?? 100) +
-                                '. Im Chat kannst du die Zahl pro Nachricht ändern.'
-                            }
+                            helperText={`Standard je Antwort: ganze Zahl von 1 bis ${
+                                settings.maxResultCount ?? 100
+                            }. Im Chat kannst du die Zahl pro Nachricht ändern.`}
                             slotProps={{
                                 htmlInput: {
                                     min: 1,
