@@ -31,6 +31,49 @@ const modelResult = (value = plan) =>
         output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
         usage: { input_tokens: 100, output_tokens: 80 },
     });
+
+test('Empty AI listings are skipped, later pages and aliases still find readable editions', async (t) => {
+    const f = await fixture(t, {
+        source: async ({ source, page, query }) =>
+            json({
+                data: {
+                    fetchSourceManga: {
+                        hasNextPage: source === '1' && page === 1,
+                        mangas:
+                            source === '3'
+                                ? []
+                                : source === '1'
+                                  ? [{ id: page === 1 ? 100 : 101, title: 'Naruto' }]
+                                  : query === 'ナルト'
+                                    ? [{ id: 201, title: 'ナルト' }]
+                                    : [{ id: 200, title: 'Naruto' }],
+                    },
+                },
+            }),
+        details: async (id) =>
+            json({
+                data: {
+                    fetchMangaAndChapters: {
+                        manga: { id },
+                        chapters: [101, 201].includes(id) ? [{ id: id + 1, chapterNumber: 1 }] : [],
+                    },
+                },
+            }),
+    });
+    const job = await f.service.start(input, request);
+    const result = await finished(f.service, job.id);
+    assert.deepEqual(result.recommendations[0].matches.map((match) => match.id).sort(), [101, 201]);
+    assert(result.recommendations[0].matches.every((match) => match.chapterEntryCount > 0));
+    assert.equal(f.modelCalls(), 1);
+});
+
+test('Failed chapter verification never exposes a source listing as readable', async (t) => {
+    const f = await fixture(t, { details: async () => json({ errors: [{ message: 'source error' }] }) });
+    const job = await f.service.start(input, request);
+    const result = await finished(f.service, job.id);
+    assert.deepEqual(result.recommendations[0].matches, []);
+    assert(result.sources.every((source) => source.phase === 'failed'));
+});
 async function fixture(t, options = {}) {
     const root = await fs.mkdtemp(join(tmpdir(), 'suwayomi-ai-'));
     const secrets = root + '/secrets';

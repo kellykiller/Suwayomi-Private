@@ -61,6 +61,8 @@ import { MigrationManager } from '@/features/migration/MigrationManager.ts';
 import { ReactRouter } from '@/lib/react-router/ReactRouter.ts';
 import type { FilterChangeInput } from '@/lib/graphql/generated/graphql-base.types.ts';
 import { OffsetComponent } from '@/base/OffsetComponent.tsx';
+import { useReadableMangas } from '@/features/manga/hooks/useReadableMangas.ts';
+import { ChapterAvailabilityNotice } from '@/features/manga/components/ChapterAvailabilityNotice.tsx';
 
 const DEFAULT_SOURCE: SourceIdInfo = { id: '-1' };
 
@@ -113,7 +115,7 @@ const useSourceManga = (
     AbortableApolloUseMutationPaginatedResponse<
         GetSourceMangasFetchMutation,
         GetSourceMangasFetchMutationVariables
-    >[1][number] & { filteredOutAllItemsOfFetchedPage: boolean },
+    >[1][number] & { filteredOutAllItemsOfFetchedPage: boolean; lastPageMangaIds: number[] },
 ] => {
     let result: AbortableApolloUseMutationPaginatedResponse<
         GetSourceMangasFetchMutation,
@@ -166,6 +168,9 @@ const useSourceManga = (
     const pages = result[1]!;
     const lastLoadedPageIndex = pages.findLastIndex((page) => !!page.data?.fetchSourceManga);
     const lastLoadedPage = pages[lastLoadedPageIndex];
+    const lastPageMangaIds = (lastLoadedPage?.data?.fetchSourceManga?.mangas ?? [])
+        .filter((item) => item.id !== mangaId && (!hideLibraryEntries || !item.inLibrary))
+        .map((item) => item.id);
 
     const isPageLoading = pages.slice(-1)[0].isLoading;
     let filteredOutAllItemsOfFetchedPage = !isPageLoading;
@@ -189,7 +194,7 @@ const useSourceManga = (
     }, [pages, hideLibraryEntries]);
 
     if (lastLoadedPageIndex === -1) {
-        return [result[0], { ...result[1][result[1].length - 1], filteredOutAllItemsOfFetchedPage }];
+        return [result[0], { ...result[1][result[1].length - 1], filteredOutAllItemsOfFetchedPage, lastPageMangaIds }];
     }
 
     return [
@@ -210,6 +215,7 @@ const useSourceManga = (
                 },
             },
             filteredOutAllItemsOfFetchedPage,
+            lastPageMangaIds,
         },
     ];
 };
@@ -294,12 +300,26 @@ export function SourceMangas() {
 
     const [
         loadPage,
-        { data, error, isLoading: loading, size: lastPageNum, abortRequest, filteredOutAllItemsOfFetchedPage },
+        {
+            data,
+            error,
+            isLoading: loading,
+            size: lastPageNum,
+            abortRequest,
+            filteredOutAllItemsOfFetchedPage,
+            lastPageMangaIds,
+        },
     ] = useSourceManga(sourceId, contentType, query, filtersToApply, 1, hideLibraryEntries, mangaId);
     currentAbortRequest.current = abortRequest;
-    const mangas = data?.fetchSourceManga?.mangas ?? STABLE_EMPTY_ARRAY;
+    const candidates = data?.fetchSourceManga?.mangas ?? STABLE_EMPTY_ARRAY;
+    const availabilityKey = `${sourceId}:${gridKey}`;
+    const availability = useReadableMangas(candidates, availabilityKey);
+    const { mangas } = availability;
     const hasNextPage = !!data?.fetchSourceManga?.hasNextPage;
-    const isLoading = loading || (filteredOutAllItemsOfFetchedPage && hasNextPage);
+    const isLoading = loading || availability.checking || (filteredOutAllItemsOfFetchedPage && hasNextPage);
+    const onlyEmptyPage =
+        lastPageMangaIds.length > 0 && lastPageMangaIds.every((id) => availability.statuses.get(id) === 'empty');
+    const skippedPages = useRef({ key: availabilityKey, page: 0, count: 0 });
     const { data: sourceData } = requestManager.useGetSource<GetSourceBrowseQuery, GetSourceBrowseQueryVariables>(
         GET_SOURCE_BROWSE,
         sourceId,
@@ -386,12 +406,12 @@ export function SourceMangas() {
     }
 
     const loadMore = useCallback(() => {
-        if (!hasNextPage) {
+        if (!hasNextPage || loading || availability.checking) {
             return;
         }
 
         loadPage(lastPageNum + 1);
-    }, [lastPageNum, hasNextPage, contentType]);
+    }, [lastPageNum, hasNextPage, contentType, loading, availability.checking]);
 
     const resetFilters = () => {
         setDialogFiltersToApply([]);
@@ -409,6 +429,21 @@ export function SourceMangas() {
             loadPage(lastPageNum + 1);
         }
     }, [filteredOutAllItemsOfFetchedPage, loading]);
+
+    useEffect(() => {
+        if (skippedPages.current.key !== availabilityKey) {
+            skippedPages.current = { key: availabilityKey, page: 0, count: 0 };
+        }
+        if (loading || availability.checking || !hasNextPage || !onlyEmptyPage || error) {
+            return;
+        }
+        if (skippedPages.current.page === lastPageNum || skippedPages.current.count >= 10) {
+            return;
+        }
+        skippedPages.current.page = lastPageNum;
+        skippedPages.current.count++;
+        void loadPage(lastPageNum + 1).catch(defaultPromiseErrorHandler('SourceMangas::skipEmptyPage'));
+    }, [availabilityKey, onlyEmptyPage, availability.checking, loading, hasNextPage, lastPageNum, error]);
 
     useEffect(() => {
         if (!clearCache) {
@@ -487,6 +522,10 @@ export function SourceMangas() {
                     </ContentTypeButton>
                 </ContentTypeMenu>
             </OffsetComponent>
+            <ChapterAvailabilityNotice {...availability} />
+            {onlyEmptyPage && hasNextPage && !loading && !availability.checking && (
+                <Button onClick={loadMore}>Weitere Treffer prüfen</Button>
+            )}
             {(isLoading || !error || (!!error && !!mangas.length)) && (
                 <BaseMangaGrid
                     // the key needs to include filters and query to force a re-render of the virtuoso grid to prevent https://github.com/petyosi/react-virtuoso/issues/1242

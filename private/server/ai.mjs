@@ -602,6 +602,7 @@ export function createAiService({
                     let failed = false;
                     for (const recommendation of job.recommendations) {
                         if (signal.aborted) break;
+                        const checkedListings = new Set();
                         const titles = [...new Set([recommendation.title, ...recommendation.aliases])];
                         for (const query of titles) {
                             if (signal.aborted) break;
@@ -630,7 +631,8 @@ export function createAiService({
                                                 titleMatches(manga.title, titles),
                                         );
                                     for (const manga of matches) {
-                                        if (!recommendation.matches.some((match) => match.id === manga.id)) {
+                                        if (!checkedListings.has(manga.id)) {
+                                            checkedListings.add(manga.id);
                                             const match = {
                                                 id: manga.id,
                                                 title: manga.title.slice(0, 250),
@@ -644,11 +646,21 @@ export function createAiService({
                                                 chapterEntryCount: null,
                                                 detailsPhase: 'loading',
                                             };
-                                            recommendation.matches.push(match);
                                             await enrichMatch(match, headers, signal, job);
+                                            if (match.detailsPhase === 'ready' && match.chapterEntryCount > 0) {
+                                                recommendation.matches.push(match);
+                                            } else if (match.detailsPhase === 'failed') {
+                                                failed = true;
+                                                source.error =
+                                                    'Kapitel konnten bei mindestens einem Treffer nicht geprüft werden.';
+                                            }
                                         }
                                     }
-                                    if (matches.length || !payload.hasNextPage) break;
+                                    if (
+                                        recommendation.matches.some((match) => match.sourceId === source.id) ||
+                                        !payload.hasNextPage
+                                    )
+                                        break;
                                     if (page === 2) source.truncated = true;
                                 }
                             } catch {

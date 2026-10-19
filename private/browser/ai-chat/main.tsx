@@ -6,6 +6,7 @@ import { I18nProvider } from '@lingui/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { AiSearch } from '@/features/ai-search/AiSearch.tsx';
+import { Availability } from './Availability.tsx';
 i18n.load('de', {});
 i18n.activate('de');
 createRoot(document.getElementById('root')!).render(
@@ -13,7 +14,7 @@ createRoot(document.getElementById('root')!).render(
         <ThemeProvider theme={createTheme()}>
             <CssBaseline />
             <BrowserRouter>
-                <AiSearch />
+                {location.pathname === '/availability-test' ? <Availability /> : <AiSearch />}
             </BrowserRouter>
         </ThemeProvider>
     </I18nProvider>,

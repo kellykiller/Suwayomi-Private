@@ -6,7 +6,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLingui } from '@lingui/react/macro';
 import Alert from '@mui/material/Alert';
@@ -15,11 +14,9 @@ import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import LinearProgress from '@mui/material/LinearProgress';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
-import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Box from '@mui/material/Box';
@@ -30,7 +27,6 @@ import type { AiSearchJob } from '@/features/ai-search/Ai.api.ts';
 
 export function AiSearchResults({ job, onMoreLike }: { job: AiSearchJob; onMoreLike: (title: string) => void }) {
     const { t, i18n } = useLingui();
-    const [onlyFound, setOnlyFound] = useState(false);
     const chapterLabel = (match: AiSearchJob['recommendations'][number]['matches'][number]) => {
         if (match.chapterCount !== null) {
             return `${match.chapterCount} ${t`Chapters`}`;
@@ -57,7 +53,16 @@ export function AiSearchResults({ job, onMoreLike }: { job: AiSearchJob; onMoreL
         interrupted: t`Not fully checked`,
     };
 
-    const recommendations = job.recommendations.filter((item) => !onlyFound || item.matches.length);
+    // Also filter historical replies created before chapter verification was required.
+    const recommendations = job.recommendations
+        .map((item, index) => ({
+            ...item,
+            number: index + 1,
+            matches: item.matches.filter(
+                (match) => match.detailsPhase === 'ready' && (match.chapterEntryCount ?? match.chapterCount ?? 0) > 0,
+            ),
+        }))
+        .filter((item) => item.matches.length > 0);
     return (
         <Stack spacing={2}>
             <Paper variant="outlined" sx={{ p: 2 }}>
@@ -119,10 +124,9 @@ export function AiSearchResults({ job, onMoreLike }: { job: AiSearchJob; onMoreL
             {!!job.recommendations.length && (
                 <>
                     <Alert severity="info">{t`Recommendation reasons are AI assessments. A source match confirms a title listing, not chapter completeness or the claimed story development. Missing matches may be caused by title variants, source errors or search limits.`}</Alert>
-                    <FormControlLabel
-                        control={<Switch checked={onlyFound} onChange={(_, value) => setOnlyFound(value)} />}
-                        label={t`Only show titles found in sources`}
-                    />
+                    <Typography color="text.secondary">
+                        Es werden nur Titel mit bestätigten verfügbaren Kapiteln angezeigt.
+                    </Typography>
                 </>
             )}
             {recommendations.map((item) => (
@@ -157,7 +161,7 @@ export function AiSearchResults({ job, onMoreLike }: { job: AiSearchJob; onMoreL
                         </Box>
                         <Stack spacing={1} sx={{ flex: 1, minWidth: 0 }}>
                             <Typography variant="h6">
-                                {job.recommendations.indexOf(item) + 1}. {item.title}
+                                {item.number}. {item.title}
                             </Typography>
                             {!!item.aliases.length && (
                                 <Typography variant="body2" color="text.secondary">
@@ -209,7 +213,10 @@ export function AiSearchResults({ job, onMoreLike }: { job: AiSearchJob; onMoreL
                 </Paper>
             ))}
             {job.finished && job.recommendations.length > 0 && !recommendations.length && (
-                <Typography>{t`No recommendations to display. Try adjusting your request or sources.`}</Typography>
+                <Typography>
+                    Keine Titel mit bestätigten verfügbaren Kapiteln gefunden. Bitte Quellenstatus und Suchdetails
+                    prüfen oder andere Quellen auswählen.
+                </Typography>
             )}
             {job.recommendations.length > 0 && (
                 <Accordion>

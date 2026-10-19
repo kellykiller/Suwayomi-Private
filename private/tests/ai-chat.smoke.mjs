@@ -55,8 +55,33 @@ const fetchImpl = async (url, options) => {
     assert.equal(options.headers.Authorization || options.headers.authorization, authorization);
     if (body.query.includes('query AiSources'))
         return json({ data: { sources: { nodes: [{ id: '1', displayName: 'Testquelle', lang: 'en' }] } } });
-    if (body.query.includes('mutation AiSourceSearch'))
-        return json({ data: { fetchSourceManga: { hasNextPage: false, mangas: [] } } });
+    if (body.query.includes('mutation AiSourceSearch')) {
+        const title = body.variables.input.query;
+        return json({
+            data: {
+                fetchSourceManga: {
+                    hasNextPage: false,
+                    mangas: [
+                        {
+                            id: title === 'Naruto' ? 10 : title === 'One Piece' ? 20 : 30,
+                            title,
+                            inLibrary: false,
+                        },
+                    ],
+                },
+            },
+        });
+    }
+    if (body.query.includes('mutation AiMatchDetails')) {
+        return json({
+            data: {
+                fetchMangaAndChapters: {
+                    manga: { id: body.variables.id },
+                    chapters: body.variables.id === 20 ? [] : [{ id: 1, chapterNumber: 1 }],
+                },
+            },
+        });
+    }
     return json({ data: { settings: { authMode: 'BASIC_AUTH' }, aboutServer: { version: 'v2.4.2366' } } });
 };
 const ai = createAiService({
@@ -74,7 +99,7 @@ const token = await sessions.issue(authorization, true),
 const gateway = createGateway({
     upstream: 'http://127.0.0.1:18082',
     webRoot: '/tmp/suwayomi-ai-chat-build',
-    manifest: { version: '0.5.4' },
+    manifest: { version: '0.5.5' },
     fetchImpl,
     sessionStore: sessions,
     aiService: ai,
@@ -114,6 +139,7 @@ try {
     await page.getByRole('button', { name: 'Mehr wie dieser Titel', exact: true }).first().waitFor();
     await page.getByRole('button', { name: 'Nachricht senden', exact: true }).waitFor({ state: 'visible' });
     await page.waitForFunction(() => document.querySelector('textarea:not([aria-hidden])')?.disabled === false);
+    assert.equal(await page.getByRole('heading', { name: '2. One Piece', exact: true }).count(), 0);
     assert.equal(bodies[0].text.format.schema.properties.recommendations.maxItems, 13);
     await page.getByRole('button', { name: 'Mehr wie dieser Titel', exact: true }).first().click();
     assert.equal(modelCalls, 1);
@@ -149,6 +175,48 @@ try {
         .waitFor();
     assert.equal(modelCalls, 3);
     assert.deepEqual(errors, []);
+    let allowFailed = false;
+    const chapterCalls = [];
+    await page.route('**/api/graphql', async (route) => {
+        const { variables } = route.request().postDataJSON();
+        chapterCalls.push(variables.id);
+        if (variables.id === 102 && !allowFailed) {
+            await route.fulfill({ status: 503, body: '' });
+            return;
+        }
+        await route.fulfill({
+            json: {
+                data: {
+                    fetchMangaAndChapters: {
+                        chapters: variables.id === 100 ? [] : [{ id: variables.id }],
+                    },
+                },
+            },
+        });
+    });
+    await page.goto(url + '/availability-test');
+    await page.getByText('Prüfung abgeschlossen', { exact: true }).waitFor();
+    assert.deepEqual(
+        await page.getByRole('list', { name: 'Verfügbare Manga' }).getByRole('listitem').allTextContents(),
+        ['Lesbar'],
+    );
+    await page.getByText(/Bei 1 Titeln konnten die Kapitel/).waitFor();
+    allowFailed = true;
+    await page.getByRole('button', { name: 'Erneut prüfen', exact: true }).click();
+    await page.getByText('Fehler', { exact: true }).waitFor();
+    assert.equal(chapterCalls.filter((id) => id === 100).length, 1);
+    assert.equal(chapterCalls.filter((id) => id === 101).length, 1);
+    assert.equal(chapterCalls.filter((id) => id === 102).length, 2);
+    await page.getByRole('button', { name: 'Suche wechseln', exact: true }).click();
+    await page.getByText('Andere Suche', { exact: true }).waitFor();
+    assert.deepEqual(
+        await page.getByRole('list', { name: 'Verfügbare Manga' }).getByRole('listitem').allTextContents(),
+        ['Andere Suche'],
+    );
+    assert.deepEqual(errors, []);
+    console.log(
+        'Chapter filter: real hook, verified-only results, empty/failed distinction, retry, cache and search change passed',
+    );
     console.log(
         'AI chat: real components, numeric limit, Enter/Shift+Enter, follow-up context, ordinary answer, reload and saved conversation passed; 0 live provider calls',
     );

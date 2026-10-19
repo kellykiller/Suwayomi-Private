@@ -65,6 +65,8 @@ import mapValues from 'lodash/fp/mapValues';
 import type { TMigratableSource } from '@/features/migration/Migration.types.ts';
 import { plural } from '@lingui/core/macro';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import { useReadableMangas } from '@/features/manga/hooks/useReadableMangas.ts';
+import { ChapterAvailabilityNotice } from '@/features/manga/components/ChapterAvailabilityNotice.tsx';
 
 type SourceLoadingState = { isLoading: boolean; hasResults: boolean; emptySearch: boolean; error: any };
 type SourceToLoadingStateMap = Map<string, SourceLoadingState>;
@@ -161,12 +163,40 @@ const SourceSearchPreview = React.memo(
             addAbortSignal: true,
         });
 
-        const { data: searchResult, isLoading, error, abortRequest } = results[0]!;
+        const {
+            isLoading: sourceLoading,
+            error: sourceError,
+            abortRequest,
+            size: lastPageNum,
+        } = results[results.length - 1]!;
         currentAbortRequest.current = abortRequest;
 
-        const tmpMangas = searchResult?.fetchSourceManga?.mangas ?? STABLE_EMPTY_ARRAY;
-        const mangas = tmpMangas.filter((manga) => manga.id !== mangaId);
+        const tmpMangas = [
+            ...new Map(
+                results
+                    .flatMap((result) => result.data?.fetchSourceManga?.mangas ?? [])
+                    .filter((manga) => manga.id !== mangaId)
+                    .map((manga) => [manga.id, manga]),
+            ).values(),
+        ];
+        const availability = useReadableMangas(tmpMangas, `${id}:${searchString}:${mangaId}`);
+        const { mangas } = availability;
+        const error = useMemo(
+            () =>
+                sourceError ||
+                (availability.failed
+                    ? new Error('Kapitelprüfung fehlgeschlagen. Betroffene Titel werden nicht angezeigt.')
+                    : undefined),
+            [sourceError, availability.failed],
+        );
+        const isLoading = sourceLoading || availability.checking;
+        const hasNextPage = !!results[results.length - 1].data?.fetchSourceManga?.hasNextPage;
         const noMangasFound = !error && !isLoading && !mangas.length;
+        useEffect(() => {
+            if (noMangasFound && hasNextPage && lastPageNum < 10 && searchString) {
+                void refetch(lastPageNum + 1).catch(defaultPromiseErrorHandler('SourceSearchPreview::skipEmptyPage'));
+            }
+        }, [noMangasFound, hasNextPage, lastPageNum, searchString]);
 
         useEffect(() => {
             onSearchRequestFinished(source, {
@@ -193,7 +223,7 @@ const SourceSearchPreview = React.memo(
             return null;
         }
 
-        if (shouldShowOnlySourcesWithResults && (noMangasFound || error)) {
+        if (shouldShowOnlySourcesWithResults && ((noMangasFound && !hasNextPage) || sourceError)) {
             return null;
         }
 
@@ -227,14 +257,26 @@ const SourceSearchPreview = React.memo(
                         </CustomTooltip>
                     </CardActionArea>
                 </Card>
-                {errorMessage ? (
+                <ChapterAvailabilityNotice {...availability} />
+                {noMangasFound && hasNextPage && (
+                    <Button
+                        onClick={() => {
+                            void refetch(lastPageNum + 1).catch(
+                                defaultPromiseErrorHandler('SourceSearchPreview::nextPage'),
+                            );
+                        }}
+                    >
+                        Weitere Treffer prüfen
+                    </Button>
+                )}
+                {sourceError ? (
                     <EmptyView
                         sx={{ alignItems: 'start', height: undefined }}
                         noFaces
                         message={errorMessage}
-                        messageExtra={getErrorMessage(error)}
+                        messageExtra={getErrorMessage(sourceError)}
                         retry={
-                            error
+                            sourceError
                                 ? () =>
                                       refetch(1).catch(
                                           defaultPromiseErrorHandler(`SourceSearchPreview(${source.id})::refetch`),
