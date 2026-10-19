@@ -66,10 +66,12 @@ export function AiSearchResults({ job, onMoreLike }: { job: AiSearchJob; onMoreL
                         {job.phase === 'completed' && !job.recommendations.length ? 'Antwort' : phases[job.phase]}
                     </Typography>
                     {!job.finished && <LinearProgress />}
-                    <Typography color="text.secondary">
-                        {t`Sources checked`}: {job.completedSources}/{job.sources.length} · {t`Source queries`}:{' '}
-                        {job.checkedQueries}
-                    </Typography>
+                    {job.recommendations.length > 0 && (
+                        <Typography color="text.secondary">
+                            {t`Sources checked`}: {job.completedSources}/{job.sources.length} · {t`Source queries`}:{' '}
+                            {job.checkedQueries}
+                        </Typography>
+                    )}
                     {job.summary && (
                         <Typography sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{job.summary}</Typography>
                     )}

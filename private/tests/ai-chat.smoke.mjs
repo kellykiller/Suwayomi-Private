@@ -113,11 +113,7 @@ try {
     await message.press('Enter');
     await page.getByRole('button', { name: 'Mehr wie dieser Titel', exact: true }).first().waitFor();
     await page.getByRole('button', { name: 'Nachricht senden', exact: true }).waitFor({ state: 'visible' });
-    await page.waitForFunction(
-        () =>
-            ![...document.querySelectorAll('button')].find((button) => button.textContent === 'Nachricht senden')
-                .disabled,
-    );
+    await page.waitForFunction(() => document.querySelector('textarea:not([aria-hidden])')?.disabled === false);
     assert.equal(bodies[0].text.format.schema.properties.recommendations.maxItems, 13);
     await page.getByRole('button', { name: 'Mehr wie dieser Titel', exact: true }).first().click();
     assert.equal(modelCalls, 1);
@@ -126,11 +122,7 @@ try {
     await count.fill('3');
     await followUp.press('Enter');
     await page.getByRole('heading', { name: '1. Bleach', exact: true }).waitFor();
-    await page.waitForFunction(
-        () =>
-            ![...document.querySelectorAll('button')].find((button) => button.textContent === 'Nachricht senden')
-                .disabled,
-    );
+    await page.waitForFunction(() => document.querySelector('textarea:not([aria-hidden])')?.disabled === false);
     assert.equal(bodies[1].input[1].role, 'assistant');
     assert.match(bodies[1].input[1].content, /Naruto/);
     assert.equal(bodies[1].text.format.schema.properties.recommendations.maxItems, 3);
