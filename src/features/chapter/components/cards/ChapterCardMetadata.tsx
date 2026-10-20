@@ -58,6 +58,7 @@ export const ChapterCardMetadata = ({
             justifyContent: 'center',
             flexGrow: 1,
             flexShrink: 1,
+            minWidth: 0,
             wordBreak: 'break-word',
         }}
     >

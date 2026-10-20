@@ -89,9 +89,10 @@ export function ChapterTranslationBadge({ status }: { status?: ChapterTranslatio
             size="small"
             icon={<TranslateIcon />}
             label={label}
+            title={label}
             color={status.state === 'translated' ? 'success' : 'warning'}
             variant="outlined"
-            sx={{ alignSelf: 'flex-start', mt: 0.5 }}
+            sx={{ alignSelf: 'flex-start', mt: 0.5, maxWidth: '100%' }}
         />
     );
 }
