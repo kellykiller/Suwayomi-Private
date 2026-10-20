@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 import * as fs from 'node:fs/promises';
 import { assert, inspect, UI_CONTAINER } from './common.mjs';
+import { logZip } from './log-archive.mjs';
 
 export const LOG_CATEGORIES = {
     translation: 'Kapitelübersetzung',
@@ -18,7 +19,7 @@ export function createLogStore({ stateRoot = '/update', secretRoot = '/secrets',
     const valid = (category) => assert(Object.hasOwn(LOG_CATEGORIES, category), 'Unbekannte Logkategorie.');
     const keys = async () =>
         Promise.all(
-            ['github', 'portainer', 'openai', 'openai-admin'].map((name) =>
+            ['github', 'portainer', 'openai', 'openai-admin', 'cloud-translator'].map((name) =>
                 fs
                     .readFile(`${secretRoot}/${name}.token`, 'utf8')
                     .then((x) => x.trim())
@@ -105,6 +106,40 @@ export function createLogStore({ stateRoot = '/update', secretRoot = '/secrets',
         const sections = [];
         const previous = await snapshot(category);
         if (previous) sections.push('Gespeicherte Aufträge (einschließlich älterer Versionen):\n' + previous);
+        if (category === 'translation') {
+            const cloudRoot = stateRoot + '/cloud-translations';
+            const names = await fs.readdir(cloudRoot).catch(() => []);
+            const batches = await Promise.all(
+                names
+                    .filter((name) => /^[a-f0-9-]{36}$/.test(name))
+                    .slice(0, 300)
+                    .map(async (name) => {
+                        try {
+                            return JSON.parse(await tail(`${cloudRoot}/${name}/batch.json`));
+                        } catch {
+                            return null;
+                        }
+                    }),
+            );
+            const cloud = batches
+                .filter(Boolean)
+                .sort((a, b) => String(b.updated).localeCompare(String(a.updated)))
+                .slice(0, 100)
+                .map((batch) =>
+                    [
+                        `${batch.updated} [${batch.id}] ${batch.phase}`,
+                        batch.message,
+                        ...(batch.chapters || []).map(
+                            (chapter) =>
+                                `${chapter.title} · ${chapter.chapterName} · ${chapter.status} · Ausgabe ${chapter.outputReady ? 'vorhanden' : 'noch nicht bereit'}${chapter.summary?.open_regions ? ' · offene Stellen: ' + chapter.summary.open_regions : ''}`,
+                        ),
+                    ]
+                        .filter(Boolean)
+                        .join('\n'),
+                )
+                .join('\n\n');
+            if (cloud) sections.push('Gespeicherte Cloud-Übersetzungen:\n' + cloud);
+        }
         const journal = (
             await Promise.all([3, 2, 1, 0].map((n) => tail(`${root}/${category}.log${n ? '.' + n : ''}`)))
         ).join('');
@@ -132,5 +167,30 @@ export function createLogStore({ stateRoot = '/update', secretRoot = '/secrets',
         const text = await clean(sections.join('\n\n').slice(-2 * LIMIT) || 'Noch keine Einträge in dieser Kategorie.');
         return { category, title: LOG_CATEGORIES[category], generated: new Date().toISOString(), text };
     };
-    return { write, read, clean };
+    const archive = async () => {
+        const generated = new Date().toISOString(),
+            files = {},
+            errors = [];
+        for (const category of Object.keys(LOG_CATEGORIES)) {
+            try {
+                files[`suwayomi-${category}.log`] = (await read(category)).text;
+            } catch (error) {
+                const message = await clean(error.message);
+                files[`suwayomi-${category}.log`] = 'Protokoll konnte nicht gelesen werden: ' + message;
+                errors.push({ category, error: message });
+            }
+        }
+        files['manifest.json'] = JSON.stringify(
+            {
+                generated,
+                categories: LOG_CATEGORIES,
+                errors,
+                scope: 'Alle Kategorien mit denselben begrenzten Auszügen wie beim Einzel-Download, einschließlich gespeicherter Cloud-Aufträge. Zugangsdaten sind ausgeblendet.',
+            },
+            null,
+            2,
+        );
+        return { generated, data: logZip(files, new Date(generated)) };
+    };
+    return { write, read, clean, archive };
 }

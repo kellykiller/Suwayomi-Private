@@ -228,11 +228,11 @@ export function createCloudTranslationService({
         }
         return structuredClone(batch);
     }
-    async function list() {
+    async function list({ all = false } = {}) {
         await load();
         return [...batches.values()]
             .sort((a, b) => b.created.localeCompare(a.created))
-            .slice(0, 100)
+            .slice(0, all ? batches.size : 100)
             .map((b) => structuredClone(b));
     }
     async function enqueue(chapter, req, signal) {
@@ -572,12 +572,32 @@ export function createCloudTranslationService({
             )
             .sort((a, b) => b.revision - a.revision)[0];
         if (!item) return null;
+        const names = new Set(
+            (
+                await fs
+                    .readdir(directory(item.batchId) + '/' + item.id + '/pages', { withFileTypes: true })
+                    .catch((error) => {
+                        if (error.code === 'ENOENT') return [];
+                        throw error;
+                    })
+            )
+                .filter((entry) => entry.isFile())
+                .map((entry) => entry.name),
+        );
+        assert(
+            Array.from(
+                { length: item.outputPageCount ?? item.pageCount },
+                (_, index) => String(index + 1).padStart(4, '0') + '.png',
+            ).every((name) => names.has(name)),
+            'Gespeicherte Übersetzungsseiten fehlen. Nach dem NAS-Umzug den Daten-Mount und die übernommenen Dateien prüfen.',
+        );
         const prefix = `/private-api/cloud-translations/files/${item.batchId}/${item.id}`;
         return {
             id: item.id,
             revision: item.revision,
             translatedPages: item.outputPageCount ?? item.pageCount,
             pageCount: item.outputPageCount ?? item.pageCount,
+            retainedRegions: item.status === 'completed_with_retained_regions' || (item.summary?.open_regions ?? 0) > 0,
             pages: Array.from({ length: item.outputPageCount ?? item.pageCount }, (_, i) => `${prefix}/page/${i}`),
         };
     }

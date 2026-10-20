@@ -41,6 +41,30 @@ export function LogsScreen() {
     const [automatic, setAutomatic] = useState(false);
     const [revision, setRevision] = useState(0);
     const [filter, setFilter] = useState('');
+    const [archiving, setArchiving] = useState(false);
+    const downloadAll = async () => {
+        setArchiving(true);
+        try {
+            const token = AuthManager.getAccessToken();
+            const response = await fetch('/private-api/logs/archive', {
+                credentials: 'include',
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            if (!response.ok) {
+                throw new Error((await response.json().catch(() => null))?.error || `HTTP ${response.status}`);
+            }
+            const url = URL.createObjectURL(await response.blob());
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `suwayomi-logs-${new Date().toISOString().replaceAll(':', '-')}.zip`;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+        } finally {
+            setArchiving(false);
+        }
+    };
     useEffect(() => {
         const controller = new AbortController();
         let timer: ReturnType<typeof setTimeout>;
@@ -130,6 +154,15 @@ export function LogsScreen() {
                 </Button>
                 <Button variant="contained" disabled={!current} onClick={download}>
                     Log herunterladen
+                </Button>
+                <Button
+                    variant="contained"
+                    disabled={archiving}
+                    onClick={() => {
+                        void downloadAll();
+                    }}
+                >
+                    {archiving ? 'ZIP wird erstellt …' : 'Alle Logs als ZIP herunterladen'}
                 </Button>
                 <FormControlLabel
                     control={<Switch checked={automatic} onChange={(_, checked) => setAutomatic(checked)} />}

@@ -13,6 +13,7 @@ export default defineConfig({
                 'features/source/services/Sources.ts',
                 'features/settings/services/ServerSettingsMetadata.ts',
                 'features/navigation-bar/hooks/useAppTitleAndAction.ts',
+                'features/navigation-bar/hooks/useAppTitle.ts',
                 'features/source/components/SourceLanguageSelect.tsx',
                 'base/components/SpinnerImage.tsx',
                 'base/AppRoute.constants.ts',

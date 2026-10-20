@@ -7,7 +7,7 @@
  */
 
 import type { MutableRefObject } from 'react';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
 import Box from '@mui/material/Box';
@@ -46,6 +46,7 @@ import { READER_DEFAULT_PAGES_STATE } from '@/features/reader/stores/ReaderPages
 
 import { getReaderChaptersStore, getReaderPagesStore } from '@/features/reader/stores/ReaderStore.ts';
 import { useTranslationReader } from '@/features/translation/TranslationReader.tsx';
+import { useReaderOriginalPages } from '@/features/reader/hooks/useReaderOriginalPages.ts';
 
 const BaseReaderChapterViewer = ({
     currentPageIndex,
@@ -230,9 +231,7 @@ const BaseReaderChapterViewer = ({
         [],
     );
 
-    useEffect(() => {
-        doFetchPages();
-    }, [chapterId]);
+    useReaderOriginalPages(chapterId, translation.loading, !!translation.pages, doFetchPages);
 
     useResizeObserver(
         ref,
@@ -340,7 +339,11 @@ const BaseReaderChapterViewer = ({
             >
                 <EmptyViewAbsoluteCentered
                     message={t`Unable to load data`}
-                    messageExtra={getErrorMessage(pagesResponse.error)}
+                    messageExtra={
+                        /Source(?:NotInstalledException| not installed)/i.test(getErrorMessage(pagesResponse.error))
+                            ? `Die Quellenerweiterung für dieses Kapitel ist nicht installiert. Unter Suchen → Erweiterungen die ursprüngliche Erweiterung erneut installieren. Gespeicherte Kapitelinformationen allein enthalten keine Bildseiten. ${getErrorMessage(pagesResponse.error)}`
+                            : getErrorMessage(pagesResponse.error)
+                    }
                     retry={() => {
                         doFetchPages();
                     }}

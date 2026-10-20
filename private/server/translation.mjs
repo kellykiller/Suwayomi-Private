@@ -874,6 +874,24 @@ export function createTranslationService({
             if (!job) return null;
             const data = await content(job);
             const rendered = (page) => page.translationComplete && (page.renderComplete || job.phase === 'completed');
+            for (const kind of ['original', 'translated']) {
+                const needed = data.pages.filter((page) => (rendered(page) ? 'translated' : 'original') === kind);
+                if (!needed.length) continue;
+                const names = new Set(
+                    (
+                        await fs.readdir(jobRoot(job.id) + '/' + kind, { withFileTypes: true }).catch((error) => {
+                            if (error.code === 'ENOENT') return [];
+                            throw error;
+                        })
+                    )
+                        .filter((entry) => entry.isFile())
+                        .map((entry) => entry.name),
+                );
+                assert(
+                    needed.every((page) => names.has(String(page.index).padStart(4, '0') + '.png')),
+                    'Gespeicherte Übersetzungsseiten fehlen. Nach dem NAS-Umzug den Daten-Mount und die übernommenen Dateien prüfen.',
+                );
+            }
             return {
                 id: job.id,
                 revision: job.revision,

@@ -34,6 +34,7 @@ import { createCloudTranslationService } from './cloud-translations.mjs';
 import { createLogStore, LOG_CATEGORIES } from './logs.mjs';
 import { translatorBootstrap } from './translator-update.mjs';
 import { createBrowserAuth, upstreamCookies } from './browser-auth.mjs';
+import { createTranslationStatusReader } from './translation-status.mjs';
 
 const hop = new Set([
     'connection',
@@ -197,6 +198,7 @@ export function createGateway({
         upstream: target,
         fetchImpl,
     });
+    const translationStatuses = createTranslationStatusReader({ upstream: target, fetchImpl, translations, cloud });
     let startingAiAction = false;
     const startAiAction = async (action) => {
         assert(!startingAiAction, 'Eine KI-Aktion wird bereits vorbereitet.');
@@ -337,6 +339,17 @@ export function createGateway({
                 }
                 if (req.method === 'GET' && url.pathname === '/private-api/logs')
                     return json(res, 200, { categories: LOG_CATEGORIES });
+                if (req.method === 'GET' && url.pathname === '/private-api/logs/archive') {
+                    const result = await logs.archive();
+                    res.writeHead(200, {
+                        'Content-Type': 'application/zip',
+                        'Content-Disposition': `attachment; filename="suwayomi-logs-${result.generated.replaceAll(':', '-')}.zip"`,
+                        'Content-Length': result.data.length,
+                        'Cache-Control': 'no-store',
+                        'X-Content-Type-Options': 'nosniff',
+                    });
+                    return res.end(result.data);
+                }
                 if (req.method === 'GET' && url.pathname === '/private-api/logs/read') {
                     const result = await logs.read(url.searchParams.get('category'));
                     if (url.searchParams.get('download') === '1') {
@@ -392,6 +405,8 @@ export function createGateway({
                     return json(res, 404, { error: 'Unbekannte Cloud-Aktion.' });
                 }
                 if (url.pathname.startsWith('/private-api/translations/')) {
+                    if (req.method === 'GET' && url.pathname === '/private-api/translations/statuses')
+                        return json(res, 200, await translationStatuses(Number(url.searchParams.get('mangaId')), req));
                     if (req.method === 'GET' && url.pathname === '/private-api/translations/performance')
                         return json(res, 200, await translations.performance());
                     if (req.method === 'GET' && url.pathname === '/private-api/translations/jobs')

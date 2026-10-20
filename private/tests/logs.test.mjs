@@ -9,6 +9,7 @@ import { dockerLogText, boundedText } from '../server/log-utils.mjs';
 import { portainerClient, writeJson } from '../server/common.mjs';
 import { createImageWorker } from '../server/translation-worker.mjs';
 import { createGateway } from '../server/gateway.mjs';
+import { execFileSync } from 'node:child_process';
 
 async function temp(t) {
     const root = await fs.mkdtemp(tmpdir() + '/suwayomi-logs-');
@@ -61,6 +62,40 @@ test('Logs rotate at the size limit without deleting other categories', async (t
     assert.equal((await fs.stat(root + '/logs/ocr.log.1')).size, 2 * 1024 * 1024 + 1);
     assert.match(await fs.readFile(root + '/logs/ocr.log', 'utf8'), /new event/);
     assert.equal(await fs.readFile(root + '/logs/system.log', 'utf8'), 'must stay');
+});
+test('All-log ZIP is valid, includes every category and cloud jobs, and redacts credentials in every entry', async (t) => {
+    const root = await temp(t),
+        id = randomUUID();
+    await fs.writeFile(root + '/secrets/cloud-translator.token', 'internal-cloud-secret-fixture');
+    await fs.mkdir(root + '/cloud-translations/' + id, { recursive: true });
+    await writeJson(root + '/cloud-translations/' + id + '/batch.json', {
+        id,
+        phase: 'completed',
+        updated: '2026-10-20',
+        chapters: [{ title: 'Manga', chapterName: 'Chapter 34', status: 'completed', outputReady: true }],
+    });
+    const logs = createLogStore({ stateRoot: root, secretRoot: root + '/secrets' });
+    await logs.write('system', 'INFO', 'äöü internal-cloud-secret-fixture');
+    const zip = await logs.archive();
+    await fs.writeFile(root + '/all.zip', zip.data);
+    const result = JSON.parse(
+        execFileSync(
+            'python3',
+            [
+                '-c',
+                'import sys,zipfile,json; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; print(json.dumps({n:z.read(n).decode("utf-8") for n in z.namelist()}))',
+                root + '/all.zip',
+            ],
+            { encoding: 'utf8' },
+        ),
+    );
+    assert.equal(Object.keys(result).length, 7);
+    for (const category of ['translation', 'ocr', 'ai', 'updates', 'system', 'suwayomi'])
+        assert(result['suwayomi-' + category + '.log']);
+    assert.match(result['suwayomi-system.log'], /äöü/);
+    assert.match(result['suwayomi-translation.log'], /Chapter 34.*Ausgabe vorhanden/);
+    assert(!JSON.stringify(result).includes('internal-cloud-secret-fixture'));
+    assert.deepEqual(JSON.parse(result['manifest.json']).errors, []);
 });
 test('Docker stdout/stderr frames decode as text and oversized responses are rejected', async () => {
     assert.equal(dockerLogText(Buffer.concat([frame('first\n'), frame('second\n')])), 'first\nsecond\n');
@@ -193,4 +228,11 @@ test('Logs require verified native Basic Auth, reject traversal and download the
     assert.match(response.headers.get('content-type'), /text\/plain/);
     assert.match(await response.text(), /diagnostic detail/);
     assert.equal((await fetch(url + '../secrets', { headers })).status, 400);
+    const archiveUrl = url.split('/private-api/')[0] + '/private-api/logs/archive';
+    assert.equal((await fetch(archiveUrl)).status, 401);
+    const archive = await fetch(archiveUrl, { headers });
+    assert.equal(archive.status, 200);
+    assert.match(archive.headers.get('content-type'), /application\/zip/);
+    assert.match(archive.headers.get('content-disposition'), /\.zip/);
+    assert.equal(Buffer.from(await archive.arrayBuffer()).readUInt32LE(0), 0x04034b50);
 });

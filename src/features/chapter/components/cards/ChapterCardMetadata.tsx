@@ -37,12 +37,14 @@ export const ChapterCardMetadata = ({
     secondaryText,
     ternaryText,
     infoIcons,
+    extraInfo,
     slotProps,
 }: {
     title: string;
     secondaryText?: string | null;
     ternaryText?: string | null;
     infoIcons?: ReactNode;
+    extraInfo?: ReactNode;
     slotProps?: {
         title?: ComponentProps<typeof TypographyMaxLines>;
         secondaryText?: ComponentProps<typeof TypographyMaxLines>;
@@ -107,5 +109,6 @@ export const ChapterCardMetadata = ({
                 </TypographyMaxLines>
             </CustomTooltip>
         )}
+        {extraInfo}
     </Box>
 );

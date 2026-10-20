@@ -216,6 +216,7 @@ test('Whole-manga job downloads missing chapters once, imports complete PNG/CBZ 
             f.chapters.find((c) => c.id === item.chapterId),
         );
         assert.equal(available.pages.length, 2);
+        assert.equal(available.retainedRegions, true);
         assert.match(available.pages[0], /\/page\/0$/);
         assert.equal(
             await f.service.available(item.chapterId, {

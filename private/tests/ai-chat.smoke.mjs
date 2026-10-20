@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { createGateway } from '../server/gateway.mjs';
 import { createAiService } from '../server/ai.mjs';
 import { createSessionStore, SESSION_COOKIE } from '../server/browser-auth.mjs';
+import { createLogStore } from '../server/logs.mjs';
 const { chromium } = await import(
     pathToFileURL(process.env.LOGIN_PLAYWRIGHT + '/node_modules/playwright/index.mjs').href
 );
@@ -96,6 +97,8 @@ await ai.save({ key: 'sk-proj-' + 'testOnly'.repeat(6), enabled: true });
 const sessions = createSessionStore({ root: root + '/sessions' });
 const token = await sessions.issue(authorization, true),
     config = { origins: [] };
+const logs = createLogStore({ stateRoot: root, secretRoot: root + '/secrets' });
+await logs.write('system', 'INFO', 'NAS migration browser fixture');
 const gateway = createGateway({
     upstream: 'http://127.0.0.1:18082',
     webRoot: '/tmp/suwayomi-ai-chat-build',
@@ -104,7 +107,7 @@ const gateway = createGateway({
     sessionStore: sessions,
     aiService: ai,
     configLoader: async () => config,
-    logService: { write: async () => {} },
+    logService: logs,
     translationService: { stop: async () => {}, busy: () => false },
     cloudTranslationService: { stop: async () => {}, busy: () => false },
 });
@@ -219,6 +222,66 @@ try {
     );
     console.log(
         'AI chat: real components, numeric limit, Enter/Shift+Enter, follow-up context, ordinary answer, reload and saved conversation passed; 0 live provider calls',
+    );
+    await page.addInitScript(() => localStorage.setItem('suwayomi-translation-reader', 'de'));
+    let translationMode = 'none';
+    await page.route('**/private-api/translations/chapter/34', async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        if (translationMode === 'error') {
+            await route.fulfill({ status: 503, json: { error: 'Stored lookup failed' } });
+            return;
+        }
+        await route.fulfill({
+            json: {
+                available:
+                    translationMode === 'full'
+                        ? { id: 'fixture', revision: 1, pageCount: 1, translatedPages: 1, pages: ['/local.png'] }
+                        : null,
+            },
+        });
+    });
+    await page.goto(url + '/reader-regression');
+    await page.getByText('Original-Aufrufe: 1', { exact: true }).waitFor();
+    await page.getByText('Original gewählt', { exact: true }).waitFor();
+    translationMode = 'full';
+    await page.reload();
+    await page.getByText('Übersetzte Seiten', { exact: true }).waitFor();
+    assert.equal(await page.getByText('Original-Aufrufe: 0', { exact: true }).count(), 1);
+    translationMode = 'error';
+    await page.reload();
+    await page.getByText('Original-Aufrufe: 1', { exact: true }).waitFor();
+    await page.route('**/private-api/translations/statuses?mangaId=7', (route) =>
+        route.fulfill({
+            json: {
+                mangaId: 7,
+                statuses: [
+                    { chapterId: 34, state: 'translated', translatedPages: 20, pageCount: 20 },
+                    { chapterId: 36, state: 'partial', translatedPages: 1, pageCount: 20 },
+                    { chapterId: 38, state: 'retained', translatedPages: 20, pageCount: 20 },
+                ],
+            },
+        }),
+    );
+    await page.goto(url + '/chapter-badges');
+    await page.getByText('Bereits übersetzt · Deutsch', { exact: true }).waitFor();
+    assert.equal(
+        await page
+            .getByRole('region', { name: 'Kapitel 35', exact: true })
+            .getByText(/übersetzt/i)
+            .count(),
+        0,
+    );
+    await page.getByText('Teilübersetzt · 1/20 Seiten', { exact: true }).waitFor();
+    await page.getByText('Übersetzt · mit offenen Stellen', { exact: true }).waitFor();
+    await page.goto(url + '/logs-test');
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Alle Logs als ZIP herunterladen', exact: true }).click();
+    const downloaded = await downloadPromise;
+    assert.match(downloaded.suggestedFilename(), /^suwayomi-logs-.*\.zip$/);
+    assert.equal((await fs.readFile(await downloaded.path())).readUInt32LE(0), 0x04034b50);
+    assert.deepEqual(errors, []);
+    console.log(
+        'NAS features: original fallback after missing/failed translation, translated mode, exact chapter badges and real ZIP download passed',
     );
 } finally {
     await browser.close();

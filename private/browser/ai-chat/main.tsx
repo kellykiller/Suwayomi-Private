@@ -7,15 +7,27 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { AiSearch } from '@/features/ai-search/AiSearch.tsx';
 import { Availability } from './Availability.tsx';
+import { ReaderFallback, ChapterBadges } from './NasFeatures.tsx';
+import { LogsScreen } from '@/features/logs/LogsScreen.tsx';
+const screen =
+    location.pathname === '/reader-regression' ? (
+        <ReaderFallback />
+    ) : location.pathname === '/chapter-badges' ? (
+        <ChapterBadges />
+    ) : location.pathname === '/logs-test' ? (
+        <LogsScreen />
+    ) : location.pathname === '/availability-test' ? (
+        <Availability />
+    ) : (
+        <AiSearch />
+    );
 i18n.load('de', {});
 i18n.activate('de');
 createRoot(document.getElementById('root')!).render(
     <I18nProvider i18n={i18n}>
         <ThemeProvider theme={createTheme()}>
             <CssBaseline />
-            <BrowserRouter>
-                {location.pathname === '/availability-test' ? <Availability /> : <AiSearch />}
-            </BrowserRouter>
+            <BrowserRouter>{screen}</BrowserRouter>
         </ThemeProvider>
     </I18nProvider>,
 );

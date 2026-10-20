@@ -7,6 +7,7 @@
  */
 
 import Box from '@mui/material/Box';
+import Alert from '@mui/material/Alert';
 import Stack from '@mui/material/Stack';
 import { styled } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
@@ -48,6 +49,7 @@ import { VirtuosoPersisted } from '@/lib/virtuoso/Component/VirtuosoPersisted.ts
 import { STABLE_EMPTY_ARRAY } from '@/base/Base.constants.ts';
 import { useElementSize } from '@mantine/hooks';
 import { VirtuosoUtil } from '@/lib/virtuoso/Virtuoso.util.tsx';
+import { useChapterTranslationStatuses } from '@/features/translation/ChapterTranslationStatus.tsx';
 
 type ChapterListHeaderProps = {
     scrollbarWidth: number;
@@ -138,6 +140,7 @@ export const ChapterList = ({
         manga.id,
     );
     const chapters = chaptersData?.chapters.nodes ?? STABLE_EMPTY_ARRAY;
+    const translations = useChapterTranslationStatuses(manga.id);
 
     const visibleChapters = useMemo(() => filterAndSortChapters(chapters, options), [chapters, options]);
     const visibleChapterIds = useMemo(() => Chapters.getIds(visibleChapters), [visibleChapters]);
@@ -182,6 +185,9 @@ export const ChapterList = ({
 
     return (
         <>
+            {translations.error && (
+                <Alert severity="warning">Übersetzungsstatus konnte nicht geladen werden: {translations.error}</Alert>
+            )}
             <Stack direction="column" sx={{ position: 'relative', flexBasis: '60%' }}>
                 <ChapterListHeader
                     ref={chapterListHeaderRef}
@@ -246,6 +252,7 @@ export const ChapterList = ({
                     computeItemKey={(index) => visibleChapters[index].id}
                     itemContent={(index: number) => (
                         <ChapterListCard
+                            translationStatus={translations.statuses.get(visibleChapters[index].id)}
                             index={index}
                             isSortDesc={options.reverse}
                             chapters={visibleChapters}

@@ -45,6 +45,10 @@ import type { ChapterType } from '@/lib/graphql/generated/graphql-base.types.ts'
 import { usePress } from '@/base/hooks/usePress.ts';
 import { AppRoutes } from '@/base/AppRoute.constants.ts';
 import { ReaderService } from '@/features/reader/services/ReaderService.ts';
+import {
+    ChapterTranslationBadge,
+    type ChapterTranslationStatus,
+} from '@/features/translation/ChapterTranslationStatus.tsx';
 
 type TChapter = ChapterIdInfo &
     ChapterMangaInfo &
@@ -58,6 +62,7 @@ type TChapter = ChapterIdInfo &
     Pick<ChapterType, 'uploadDate'>;
 
 interface IProps {
+    translationStatus?: ChapterTranslationStatus;
     mode?: 'manga.page' | 'reader';
     chapter: TChapter;
     showChapterNumber: boolean;
@@ -146,6 +151,7 @@ export const ChapterCard = memo((props: IProps) => {
                         >
                             <ListCardContent>
                                 <ChapterCardMetadata
+                                    extraInfo={<ChapterTranslationBadge status={props.translationStatus} />}
                                     title={showChapterNumber ? `${t`Chapter`} ${chapter.chapterNumber}` : chapter.name}
                                     secondaryText={chapter.scanlator}
                                     ternaryText={`${getDateString(Number(chapter.uploadDate ?? 0), true)}${

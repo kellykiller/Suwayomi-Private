@@ -15,6 +15,7 @@ export const Sources = {
 };
 export const useMetadataServerSettings = () => ({ settings: { showNsfw: false } });
 export const useAppTitleAndAction = () => {};
+export const useAppTitle = () => {};
 export const SourceLanguageSelect = () => null;
 export const AppRoutes = {
     settings: { children: { ai: { path: '/settings/ai' }, aiUsage: { path: '/settings/ai-usage' } } },
