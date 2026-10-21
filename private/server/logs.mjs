@@ -2,6 +2,7 @@
 import * as fs from 'node:fs/promises';
 import { assert, inspect, UI_CONTAINER } from './common.mjs';
 import { logZip } from './log-archive.mjs';
+import { formatLogTime, formatLogText } from './log-time.mjs';
 
 export const LOG_CATEGORIES = {
     translation: 'Kapitelübersetzung',
@@ -40,7 +41,7 @@ export function createLogStore({ stateRoot = '/update', secretRoot = '/secrets',
                     });
             }
             const text = await clean(String(message).slice(0, 24000));
-            const header = `${new Date().toISOString()} [${level}]${jobId ? ' [' + jobId + ']' : ''} `;
+            const header = `${formatLogTime()} [${level}]${jobId ? ' [' + jobId + ']' : ''} `;
             await fs.appendFile(path, header + text.replaceAll('\n', '\n    ') + '\n', { mode: 0o600 });
         });
         // Logging failures must not break an otherwise successful translation or hide its original error.
@@ -165,7 +166,12 @@ export function createLogStore({ stateRoot = '/update', secretRoot = '/secrets',
             }
         }
         const text = await clean(sections.join('\n\n').slice(-2 * LIMIT) || 'Noch keine Einträge in dieser Kategorie.');
-        return { category, title: LOG_CATEGORIES[category], generated: new Date().toISOString(), text };
+        return {
+            category,
+            title: LOG_CATEGORIES[category],
+            generated: new Date().toISOString(),
+            text: formatLogText(text),
+        };
     };
     const archive = async () => {
         const generated = new Date().toISOString(),

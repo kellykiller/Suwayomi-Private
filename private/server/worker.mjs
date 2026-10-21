@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { timestampBuildLog } from './log-time.mjs';
 import {
     BASE,
     UI_CONTAINER,
@@ -209,7 +210,9 @@ export async function runJob(id) {
     let lastLog = 0;
     const log = async (value) => {
         if (!value) return;
-        job.logs.push(value.replaceAll(keys.github, '[hidden]').replaceAll(keys.portainer, '[hidden]'));
+        job.logs.push(
+            timestampBuildLog(value.replaceAll(keys.github, '[hidden]').replaceAll(keys.portainer, '[hidden]')),
+        );
         job.logs = job.logs.slice(-80);
         if (Date.now() - lastLog > 1000) {
             await writeJson(jobPath(id), job);

@@ -25,8 +25,17 @@ import type { TaskSummary } from '@/features/tasks/Tasks.api.ts';
 import { tasksApi } from '@/features/tasks/Tasks.api.ts';
 import { AuthManager } from '@/features/authentication/AuthManager.ts';
 import { useAppTitle } from '@/features/navigation-bar/hooks/useAppTitle.ts';
+import { formatLogTime } from '@/features/logs/logTime.ts';
 
-type Job = { id: string; phase: string; action: string; message: string; logs: string[]; finished: string | null };
+type Job = {
+    id: string;
+    phase: string;
+    action: string;
+    message: string;
+    logs: string[];
+    started?: string;
+    finished: string | null;
+};
 type Status = {
     manifest: { version: string; commit: string; upstreamTag: string };
     repository: string;
@@ -244,6 +253,11 @@ export function PrivateUpdates() {
                 <Paper variant="outlined" sx={{ p: 2 }}>
                     <Stack spacing={1}>
                         <Typography variant="subtitle1">{phases[status.job.phase] ?? status.job.phase}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            {status.job.started && `Gestartet: ${formatLogTime(status.job.started)} · `}
+                            {status.job.finished && `Beendet: ${formatLogTime(status.job.finished)} · `}
+                            Deutsche Zeit (Europe/Berlin)
+                        </Typography>
                         {status.busy && <LinearProgress />}
                         {status.job.message && (
                             <Alert severity={status.job.phase === 'failed' ? 'error' : 'info'}>

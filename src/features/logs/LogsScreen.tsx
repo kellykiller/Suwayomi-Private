@@ -20,6 +20,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { AuthManager } from '@/features/authentication/AuthManager.ts';
 import { useAppTitle } from '@/features/navigation-bar/hooks/useAppTitle.ts';
+import { formatLogTime } from '@/features/logs/logTime.ts';
 
 const categories: Record<string, string> = {
     translation: 'Kapitelübersetzung',
@@ -178,7 +179,7 @@ export function LogsScreen() {
             />
             {current && (
                 <Typography variant="body2">
-                    Stand: {new Date(current.generated).toLocaleString()} · {current.title}
+                    Stand: {formatLogTime(current.generated)} · {current.title} · Deutsche Zeit (Europe/Berlin)
                 </Typography>
             )}
             <Box
